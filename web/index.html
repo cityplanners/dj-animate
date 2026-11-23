@@ -51,7 +51,16 @@
           <div class="stage-wrap"><canvas id="stage" width="1280" height="720" aria-label="Layered music-reactive scene preview"></canvas><div id="loading" class="loading">Building your scene…</div><span class="stage-watermark">SPACE PIRATES</span></div>
           <div class="transport"><button id="play" class="play-button" aria-label="Play audio">▶</button><div class="transport-track"><strong id="track-name">Backseat <span>— DÊTRE</span></strong><span id="track-detail">5-second study · 00:40–00:45 of the original track</span></div><span id="time" class="time">00:00 / 00:05</span><label class="loop-control"><input id="loop" type="checkbox" checked>Loop</label></div>
           <label class="sr-only" for="seek">Audio position</label><input type="range" id="seek" class="seek" min="0" max="5" value="0" step="0.01">
-          <div class="stage-footer"><label class="button quiet file-button">＋ Load your music<input type="file" id="audio-file" accept="audio/*,video/mp4,video/webm"></label><span id="status" role="status" aria-live="polite">Ready when you are.</span><button id="record" class="button coral">Export 5 seconds</button></div>
+          <section class="clip-editor" aria-label="Video selection">
+            <div class="clip-heading"><span>VIDEO SELECTION</span><output id="clip-duration">5s selected</output><button id="clip-full" class="text-button">Full track</button></div>
+            <div class="clip-range" id="clip-range">
+              <div class="clip-range-track"><div id="clip-highlight" class="clip-range-highlight"></div></div>
+              <label for="clip-start" class="sr-only">Selection start</label><input id="clip-start" type="range" min="0" max="5" value="0" step="0.1">
+              <label for="clip-end" class="sr-only">Selection end</label><input id="clip-end" type="range" min="0" max="5" value="5" step="0.1">
+            </div>
+            <div class="clip-times"><label>Start <input id="clip-start-time" type="number" aria-label="Selection start seconds" min="0" max="5" value="0" step="0.1"><span>s</span></label><output id="clip-timecode">00:00.0 – 00:05.0</output><label>End <input id="clip-end-time" type="number" aria-label="Selection end seconds" min="0" max="5" value="5" step="0.1"><span>s</span></label></div>
+          </section>
+          <div class="stage-footer"><label class="button quiet file-button">＋ Load your music<input type="file" id="audio-file" accept="audio/*,video/mp4,video/webm"></label><span id="status" role="status" aria-live="polite">Ready when you are.</span><button id="record" class="button coral">Export 5s</button></div>
         </div>
         <section id="waves" class="panel wave-panel">
           <div class="panel-heading"><div><p class="eyebrow">FOUR BANDS. ONE FEELING.</p><h2>The music, untangled.</h2></div><a class="text-button" href="./assets/backseat-four-bands.png" download>Save graph</a></div>
@@ -69,7 +78,7 @@
         <div id="effect-list" class="effect-list"></div>
       </aside>
     </div>
-    <section class="field-guide" id="guide"><div><p class="eyebrow">BUILD THE SHOT, THEN BEND IT</p><h2>Layers before motion.<br><em>Feeling before frequency.</em></h2></div><ol><li><strong>Dissect the scene.</strong><span>Start with a clean background and transparent sprites. This editor composites your prepared layers.</span></li><li><strong>Find the four curves.</strong><span>Load music to analyze bass, body, upper mids, and highs. Response smoothing gives each move weight.</span></li><li><strong>Route, mix, export.</strong><span>Toggle distortions, assign a band, and dial the intensity. Save a project with its assets or record a five-second video.</span></li></ol></section>
+    <section class="field-guide" id="guide"><div><p class="eyebrow">BUILD THE SHOT, THEN BEND IT</p><h2>Layers before motion.<br><em>Feeling before frequency.</em></h2></div><ol><li><strong>Dissect the scene.</strong><span>Start with a clean background and transparent sprites. This editor composites your prepared layers.</span></li><li><strong>Find the four curves.</strong><span>Load music to analyze bass, body, upper mids, and highs. Response smoothing gives each move weight.</span></li><li><strong>Route, mix, export.</strong><span>Toggle distortions, drag the selection handles to choose a clip, and export that range with audio. Save a project to keep its assets and settings.</span></li></ol></section>
     <footer><strong>SPACE PIRATES</strong><span>dj-animate / 0.2 <i>·</i> Built for the after hours.</span><a href="./assets/backseat-sample.gif" download>Download sample GIF</a><span>Photos and music stay in this browser.</span></footer>
   </main>
   <audio id="audio" preload="auto" loop src="./assets/backseat-40-45.mp3"></audio>

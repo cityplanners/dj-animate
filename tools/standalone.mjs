@@ -5,7 +5,7 @@ const root = path.resolve(import.meta.dirname, '..'), web = path.join(root, 'web
 let html = await readFile(path.join(web, 'index.html'), 'utf8');
 const css = await readFile(path.join(web, 'style.css'), 'utf8');
 let script = '';
-for (const name of ['dsp', 'effects', 'renderer', 'app']) {
+for (const name of ['dsp', 'effects', 'renderer', 'selection', 'app']) {
   const source = await readFile(path.join(web, 'src', name + '.mjs'), 'utf8');
   script += source.replace(/^import .*?;\s*$/gm, '').replace(/^export /gm, '') + '\n';
 }

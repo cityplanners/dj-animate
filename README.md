@@ -32,10 +32,15 @@ it needs no local server or network. It has the same editor and upload controls.
 3. Load audio or an MP4/WebM with audio. Decoding and analysis stay on the device.
 4. Choose a preset, toggle individual effects, choose a driver band per effect,
    and set effect amounts, master intensity, audio gain and response smoothing.
-5. Scrub, play, loop, or export five seconds of real-time canvas video with audio.
-   The browser selects WebM or MP4 according to MediaRecorder support.
+5. Drag the Video selection start/end handles, or enter exact start/end seconds.
+   The selected section is highlighted in the waveform, and the export button
+   shows its duration. Choose **Full track** to export the entire loaded song.
+   Exports seek to the selection start and record that range with audio; changing
+   the playhead first does not change the selected export. The browser selects
+   WebM or MP4 according to MediaRecorder support.
 6. Save an embedded `.djscene.json` project to retain images, loaded audio,
-   transforms, routes, and settings. Reopen it through Open project.
+   transforms, routes, selection range, and settings. Reopen it through Open project.
+   Older project files remain compatible and default to a five-second selection.
 
 The bundled sample is Backseat by DÊTRE, source 00:40–00:45 from the user's supplied
 file. The demo contains a background plate and a Pendragon sprite generated for
@@ -100,6 +105,7 @@ not implemented toggles in this release.
 - `web/src/app.mjs`: editor, uploads, playback, graph, project I/O and export.
 - `tools/analyze.py`: matching offline analysis and sample data generation.
 - `tools/plot_waves.py`: publication-size PNG/SVG graph and CSV data.
+- `web/src/selection.mjs`: clip bounds, duration labels, and seek-before-record handling.
 - `tools/standalone.mjs`: optional portable one-file editor.
 - `tools/make_gif.py`: turn an exported video into an exact five-second GIF
   with `python tools/make_gif.py recording.webm --out sample.gif` (FFmpeg required).
@@ -153,14 +159,18 @@ are limited to 30 minutes to bound analysis memory. The demo GIF is five seconds
 
 ## Validation for this package
 
-- Six Node tests pass, including browser/offline envelope parity for every
-  stored sample point.
+- Node tests cover browser/offline envelope parity, clip bounds, saved range
+  restoration, and waiting for media seeking before export.
 - Browser checks passed for Canvas preview, audio upload and four-band analysis,
   sprite upload, visibility, effect toggles and routing, and embedded project
   save/reopen (images, audio, transforms and selected routes restored).
 - Five-second browser video export includes both 1280×720 video and audio.
   The requested silent GIF is converted from that actual editor export:
   100 frames at 20 fps, exactly 5,000 ms, 960×540.
+- Browser trim checks cover dragging a handle, a 1.0–8.5-second selection on
+  a longer uploaded track, export with video/audio from that selection, and
+  saving/reopening the selected range. MediaRecorder output includes browser
+  timing overhead; selection is not a frame-accurate offline trim.
 - The preview browser did not expose WebGL. The shader path is implemented
   but could not be exercised there; the Canvas fallback was the path tested.
-- Production GitHub Pages, DNS and mobile hardware have not been exercised.
+- Custom-domain DNS and mobile hardware have not been exercised.
