@@ -108,9 +108,8 @@ not implemented toggles in this release.
 
 ## GitHub Pages: City Planners
 
-The initial deployment uses the default Pages address for
-`cityplanners/dj-animate`. The custom hostname `gta.spacepirates.net` is reserved
-for a later DNS change.
+The production hostname is `dj.cityplanners.co`, served by GitHub Pages from
+`cityplanners/dj-animate`.
 
 The included workflow tests, builds, uploads `dist/`, and deploys on pushes to
 `main` or manual dispatch. There is no Site hosting registration; GitHub Pages
@@ -118,16 +117,22 @@ is the intended production host.
 
 1. Put this source in the desired GitHub repository. Push a `main` branch.
 2. Repository Settings → Pages → Build and deployment → **GitHub Actions**.
-3. In the same Pages settings, set the custom domain to **gta.spacepirates.net**.
+3. In the same Pages settings, set the custom domain to **dj.cityplanners.co**.
    The bundled CNAME file documents the intended hostname; Actions deployments
    do not configure the repository's custom-domain setting through CNAME.
-4. In DNS, add CNAME **gta** → **cityplanners.github.io** (no protocol, path, or repo
+4. In Squarespace DNS, add CNAME **dj** → **cityplanners.github.io** (no protocol, path, or repo
    name). Remove a conflicting A/AAAA/CNAME for that exact subdomain first.
 5. After DNS validation and certificate provisioning, enable Enforce HTTPS.
 6. Run the Pages workflow. Verify the deployed scene, upload flow and audio.
 
-GitHub Pages is enabled with the included Actions workflow. The custom domain
-is a future configuration change; publishing uses the default Pages hostname.
+GitHub Pages is enabled with the included Actions workflow. Custom-domain
+routing requires both the Pages custom-domain setting and the Squarespace DNS
+record. GitHub provisions the HTTPS certificate once the DNS check succeeds.
+
+The static document head includes Twitter large-image and Open Graph metadata,
+with `dj.cityplanners.co` as its canonical address. The preview image is the
+original Pendragon mural illustration, unchanged. Its absolute public GitHub
+image URL keeps the image reachable independently of custom-domain DNS.
 
 Official references:
 - https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages
