@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17111f">
+  <meta name="description" content="dj-animate by Space Pirates. Layer your scenes. Route the music. Make it move.">
+  <title>dj-animate · Space Pirates Motion Studio</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/mark.svg">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="dj-animate home"><img src="./assets/mark.svg" alt=""><span>dj<span class="brand-dash">—</span>animate<small>SPACE PIRATES · MOTION STUDIO</small></span></a>
+    <nav aria-label="Studio navigation"><a href="#studio" class="active">Studio</a><a href="#waves">Audio lab</a><a href="#guide">Field guide</a></nav>
+    <div class="top-actions"><span class="local-badge">Runs on your device</span><button id="save-project" class="button quiet">Save project</button></div>
+  </header>
+  <main>
+    <section class="intro" id="studio">
+      <div><p class="eyebrow">THE CITY NEVER STANDS STILL</p><h1>Give your scene <em>a pulse.</em></h1><p class="intro-copy">Your layers. Your music. A little beautiful distortion.</p></div>
+      <div class="session"><span class="session-tag">AFTER HOURS / 001</span><strong id="scene-label">Pendragon × Backseat</strong><span>16:9 <i>·</i> 720p <i>·</i> 30 fps</span></div>
+    </section>
+    <div class="studio-layout">
+      <aside class="panel layers-panel" aria-label="Scene layers">
+        <div class="panel-heading"><h2>Scene layers</h2><span id="layer-count" class="pill">3</span></div>
+        <p class="helper">Background first. Sprites on top.</p>
+        <label class="dropzone" id="layer-drop"><span class="upload-icon">＋</span><strong>Drop photos or sprites</strong><span>PNG, JPG, WebP · alpha supported</span><input type="file" id="layer-files" accept="image/*" multiple></label>
+        <div id="layer-list" class="layer-list"></div>
+        <div id="layer-inspector" class="inspector"></div>
+        <div class="layer-bottom"><button id="reset-scene" class="text-button">Restore demo scene</button><label class="text-button file-button">Open project<input type="file" id="project-file" accept="application/json,.json"></label></div>
+      </aside>
+      <section class="center-column" aria-label="Animation preview and audio">
+        <div class="stage-panel">
+          <div class="stage-topline"><span><span class="live-dot"></span> LIVE PREVIEW</span><div><button id="fullscreen" class="text-button">Full screen</button><span class="pill">16:9</span></div></div>
+          <div class="stage-wrap"><canvas id="stage" width="1280" height="720" aria-label="Layered music-reactive scene preview"></canvas><div id="loading" class="loading">Building your scene…</div><span class="stage-watermark">SPACE PIRATES</span></div>
+          <div class="transport"><button id="play" class="play-button" aria-label="Play audio">▶</button><div class="transport-track"><strong id="track-name">Backseat <span>— DÊTRE</span></strong><span id="track-detail">5-second study · 00:40–00:45 of the original track</span></div><span id="time" class="time">00:00 / 00:05</span><label class="loop-control"><input id="loop" type="checkbox" checked>Loop</label></div>
+          <label class="sr-only" for="seek">Audio position</label><input type="range" id="seek" class="seek" min="0" max="5" value="0" step="0.01">
+          <div class="stage-footer"><label class="button quiet file-button">＋ Load your music<input type="file" id="audio-file" accept="audio/*,video/mp4,video/webm"></label><span id="status" role="status" aria-live="polite">Ready when you are.</span><button id="record" class="button coral">Export 5 seconds</button></div>
+        </div>
+        <section id="waves" class="panel wave-panel">
+          <div class="panel-heading"><div><p class="eyebrow">FOUR BANDS. ONE FEELING.</p><h2>The music, untangled.</h2></div><a class="text-button" href="./assets/backseat-four-bands.png" download>Save graph</a></div>
+          <div class="band-legend" id="band-legend"></div>
+          <canvas id="wave-graph" height="210" aria-label="Four overlapping audio energy envelopes over time"></canvas>
+          <div class="wave-controls"><label>Audio gain <input id="gain" type="range" min="0" max="2" step=".01" value="1"><output id="gain-value">1.00×</output></label><label>Response <select id="response"><option value=".55">Snappy</option><option value="1" selected>Fluid</option><option value="1.8">Dreamy</option></select></label></div>
+          <p class="helper">Real filtered energy with eased attack and release. Frequency bands overlap at their filter slopes; they don’t isolate instruments.</p>
+        </section>
+      </section>
+      <aside class="panel effects-panel" aria-label="Effect controls">
+        <div class="panel-heading"><h2>Make it strange.</h2><span id="effect-count" class="pill">4 on</span></div>
+        <p class="helper">Pick an effect. Choose what drives it.</p>
+        <div class="preset-row" role="group" aria-label="Effect presets"><button data-preset="sunset" class="preset active">Sunset</button><button data-preset="clean" class="preset">Clean</button><button data-preset="fever" class="preset">Fever</button><button data-preset="warp" class="preset">Warp</button></div>
+        <label class="master">Master intensity <output id="master-value">65%</output><input id="master" type="range" min="0" max="1.5" value=".65" step=".01"></label>
+        <div id="effect-list" class="effect-list"></div>
+      </aside>
+    </div>
+    <section class="field-guide" id="guide"><div><p class="eyebrow">BUILD THE SHOT, THEN BEND IT</p><h2>Layers before motion.<br><em>Feeling before frequency.</em></h2></div><ol><li><strong>Dissect the scene.</strong><span>Start with a clean background and transparent sprites. This editor composites your prepared layers.</span></li><li><strong>Find the four curves.</strong><span>Load music to analyze bass, body, upper mids, and highs. Response smoothing gives each move weight.</span></li><li><strong>Route, mix, export.</strong><span>Toggle distortions, assign a band, and dial the intensity. Save a project with its assets or record a five-second video.</span></li></ol></section>
+    <footer><strong>SPACE PIRATES</strong><span>dj-animate / 0.2 <i>·</i> Built for the after hours.</span><a href="./assets/backseat-sample.gif" download>Download sample GIF</a><span>Photos and music stay in this browser.</span></footer>
+  </main>
+  <audio id="audio" preload="auto" loop src="./assets/backseat-40-45.mp3"></audio>
+  <div id="toast" role="alert" hidden></div>
+  <script type="module" src="./src/app.mjs"></script>
+</body>
+</html>
