@@ -143,6 +143,11 @@ function syncYouTube() {
     $('seek').max = duration; syncSelection();
   }
   syncPlaybackUI();
+  if (!busy && !exportBusy) {
+    if (youtube.buffering) $('status').textContent = 'YouTube is buffering…';
+    else if (!youtube.paused) $('status').textContent = tabAudioStream ? 'Playing YouTube with live tab audio.' : 'Playing YouTube. Connect tab audio for reactive motion and export.';
+    else if (youtube.readyState) $('status').textContent = 'YouTube paused.';
+  }
 }
 function captureHelp() {
   const available = !!navigator.mediaDevices?.getDisplayMedia;
@@ -438,7 +443,7 @@ async function copySceneLink() {
 }
 
 function bind() {
-  $('play').onclick = async () => { try { if (clock.paused) { if (clock.ended) clock.currentTime = 0; if (!youtube) await ensureAudio(); await clock.play(); } else clock.pause(); } catch (e) { fail(e); } };
+  $('play').onclick = async () => { try { if (clock.paused) { if (clock.ended) clock.currentTime = 0; if (!youtube) await ensureAudio(); await clock.play(); } else clock.pause(); } catch (e) { if (e.name !== 'AbortError') fail(e); } };
   audio.onplay = () => { $('play').textContent = 'Ⅱ'; $('play').setAttribute('aria-label', 'Pause audio'); };
   audio.onpause = () => { $('play').textContent = '▶'; $('play').setAttribute('aria-label', 'Play audio'); };
   audio.onended = stopRecording;

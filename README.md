@@ -170,14 +170,16 @@ are limited to 30 minutes to bound analysis memory. The demo GIF is five seconds
 
 ## Validation for this package
 
-Scene-link and YouTube changes: 31 Node tests pass, covering YouTube URL parsing,
+Scene-link and YouTube changes: 33 Node tests pass, covering YouTube URL parsing,
 timestamps, saved audio references, live envelopes, seeking and failure handling,
 the original GTA default, Unicode link round trips,
 URL bounds, streamed manifest size limits, safe packaging, legacy embedded
 projects and executable offline bundles. The actual software compositor renders
-the three-layer 32:9 example. Live browser playback/export for this update still
-needs a smoke test after deployment; the local browser was unavailable. The
-browser checks below describe the previously validated base editor.
+the three-layer 32:9 example. Live browser checks verify the GTA default, scene
+imports, pasted YouTube links, timestamps and the visible embedded player.
+YouTube metadata loads, but the stream remained in buffering in the test browser;
+live tab-audio capture has not been exercised there. Scene sharing and local/demo
+video export were verified. The checks below describe the validated base editor.
 
 - Node tests cover browser/offline envelope parity, clip bounds, saved range
   restoration, and waiting for media seeking before export.

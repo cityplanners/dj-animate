@@ -72,7 +72,7 @@ export class YouTubeTransport extends EventTarget {
               this.dispatchEvent(new Event('ended'));
               if (this.loop) { this.player.seekTo(0, true); this.player.playVideo(); }
             }
-            this.onChange();
+            this.onChange(); this.dispatchEvent(new Event('statechange'));
           },
           onAutoplayBlocked: () => { this.onChange(); this.onFailure(new Error('Press Play in the YouTube player to start audio.')); },
           onError: event => {
@@ -88,11 +88,27 @@ export class YouTubeTransport extends EventTarget {
   }
   get duration() { const n = this.player?.getDuration?.() || 0; return Number.isFinite(n) ? Math.min(1800, Math.max(0, n)) : 0; }
   get readyState() { return this.ready && !this.error && this.duration > 0 ? 2 : 0; }
-  get paused() { return this.player?.getPlayerState?.() !== 1; }
+  get paused() { return ![1, 3].includes(this.player?.getPlayerState?.()); }
+  get buffering() { return this.player?.getPlayerState?.() === 3; }
   get ended() { return this.player?.getPlayerState?.() === 0; }
   get currentTime() { return Math.max(0, this.player?.getCurrentTime?.() || 0); }
   set currentTime(seconds) { if (this.ready) this.player.seekTo(clamp(seconds, 0, this.duration || 1800), true); }
-  async play() { if (this.error) throw this.error; if (!this.ready) throw new Error('Wait for the YouTube player to load.'); this.player.playVideo(); }
+  async play(timeout = 15000) {
+    if (this.error) throw this.error;
+    if (!this.ready) throw new Error('Wait for the YouTube player to load.');
+    await new Promise((resolve, reject) => {
+      const finish = error => { clearTimeout(timer); this.removeEventListener('statechange', check); this.removeEventListener('error', check); this.removeEventListener('close', check); error ? reject(error) : resolve(); };
+      const check = event => {
+        if (this.closed || this.error) { finish(this.error || new DOMException('YouTube was closed.', 'AbortError')); return; }
+        const state = this.player.getPlayerState();
+        if (state === 1) finish();
+        else if (state === 2 && event?.type === 'statechange') finish(new DOMException('YouTube playback was paused.', 'AbortError'));
+      };
+      const timer = setTimeout(() => { finish(new Error('YouTube is still buffering. Try Play inside its player, another link, or a music file.')); this.pause(); }, timeout);
+      this.addEventListener('statechange', check); this.addEventListener('error', check); this.addEventListener('close', check);
+      try { this.player.playVideo(); check(); } catch (error) { finish(error); }
+    });
+  }
   pause() { if (this.ready) this.player.pauseVideo(); }
   tick() {
     if (this.closed) return;
@@ -117,6 +133,7 @@ export class YouTubeTransport extends EventTarget {
   }
   destroy() {
     this.closed = true; clearInterval(this.timer); clearTimeout(this.readyTimeout);
+    this.dispatchEvent(new Event('close'));
     if (this.openReject) { this.openReject(new Error('YouTube loading was cancelled.')); this.openReject = null; }
     this.player?.destroy(); this.player = null;
   }

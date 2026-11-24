@@ -91,6 +91,27 @@ test('embedding failures and missing metadata give actionable errors without han
     assert.equal(media.seeking, false);
   } finally { media.destroy(); }
 });
+test('buffering remains pausable and a stalled YouTube stream fails without locking the studio', async () => {
+  const fixture = playerFixture(); const media = new YouTubeTransport({ element: {}, origin: base, loader: async () => fixture.api });
+  try {
+    await media.open(id);
+    fixture.player.playVideo = () => { fixture.player.state = 3; fixture.player.config.events.onStateChange({ data: 3 }); };
+    const pending = media.play(10);
+    assert.equal(media.paused, false); assert.equal(media.buffering, true);
+    await assert.rejects(pending, /still buffering/);
+    assert.equal(media.paused, true);
+    const cancelled = media.play(1000); media.pause();
+    await assert.rejects(cancelled, error => error.name === 'AbortError');
+  } finally { media.destroy(); }
+});
+test('restarting a paused YouTube player waits for its asynchronous play acknowledgement', async () => {
+  const fixture = playerFixture(); const media = new YouTubeTransport({ element: {}, origin: base, loader: async () => fixture.api });
+  try {
+    await media.open(id); media.pause();
+    fixture.player.playVideo = () => setTimeout(() => { fixture.player.state = 1; fixture.player.config.events.onStateChange({ data: 1 }); }, 5);
+    await media.play(1000); assert.equal(media.paused, false);
+  } finally { media.destroy(); }
+});
 test('scene packaging retains a canonical YouTube source instead of downloading media', async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), 'dj-youtube-'));
   try {
