@@ -9,6 +9,9 @@ Say **dj-animate it** with an illustration to prepare its layers and open them
 through a scene link. [Open the First Order example](https://cityplanners.github.io/dj-animate/?scene=first-order).
 The normal website keeps its original GTA storefront and Pendragon sprites;
 chat scene imports apply only when their specific link is opened.
+Paste a YouTube video URL under the preview to play it in the studio. Desktop
+tab-audio sharing enables real band analysis and export; mobile browsers can
+play the link or use a local audio/video file for full analysis and export.
 The studio supports published scene manifests, URL settings, copying edited
 scene links, individual layer audio routes, and canvas sizes such as 32:9.
 See [the scene preparation and link protocol](docs/scene-links.md).
@@ -167,7 +170,9 @@ are limited to 30 minutes to bound analysis memory. The demo GIF is five seconds
 
 ## Validation for this package
 
-Scene-link changes: 23 Node tests pass, covering the original GTA default, Unicode link round trips,
+Scene-link and YouTube changes: 31 Node tests pass, covering YouTube URL parsing,
+timestamps, saved audio references, live envelopes, seeking and failure handling,
+the original GTA default, Unicode link round trips,
 URL bounds, streamed manifest size limits, safe packaging, legacy embedded
 projects and executable offline bundles. The actual software compositor renders
 the three-layer 32:9 example. Live browser playback/export for this update still

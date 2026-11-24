@@ -61,13 +61,18 @@
             <div class="clip-times"><label>Start <input id="clip-start-time" type="number" aria-label="Selection start seconds" min="0" max="5" value="0" step="0.1"><span>s</span></label><output id="clip-timecode">00:00.0 – 00:05.0</output><label>End <input id="clip-end-time" type="number" aria-label="Selection end seconds" min="0" max="5" value="5" step="0.1"><span>s</span></label></div>
           </section>
           <div class="stage-footer"><label class="button quiet file-button">＋ Load your music<input type="file" id="audio-file" accept="audio/*,video/mp4,video/webm"></label><span id="status" role="status" aria-live="polite">Ready when you are.</span><button id="record" class="button coral">Export 5s</button></div>
+          <section class="youtube-audio" aria-label="YouTube audio">
+            <form id="youtube-form" class="youtube-form"><label for="youtube-url">Or paste a YouTube link</label><div><input id="youtube-url" type="text" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048" placeholder="https://youtu.be/…"><button id="youtube-load" class="button quiet" type="submit">Use YouTube</button></div></form>
+            <p class="helper" id="youtube-info">Play a YouTube link here, or load a music file for full audio analysis and export.</p>
+            <div id="youtube-panel" hidden><div id="youtube-mount" class="youtube-player"></div><div class="youtube-actions"><button id="youtube-connect" class="button quiet" type="button">Connect tab audio</button><button id="youtube-close" class="text-button" type="button">Back to demo audio</button></div></div>
+          </section>
         </div>
         <section id="waves" class="panel wave-panel">
           <div class="panel-heading"><div><p class="eyebrow">FOUR BANDS. ONE FEELING.</p><h2>The music, untangled.</h2></div><a class="text-button" href="./assets/backseat-four-bands.png" download>Save graph</a></div>
           <div class="band-legend" id="band-legend"></div>
           <canvas id="wave-graph" height="210" aria-label="Four overlapping audio energy envelopes over time"></canvas>
           <div class="wave-controls"><label>Audio gain <input id="gain" type="range" min="0" max="2" step=".01" value="1"><output id="gain-value">1.00×</output></label><label>Response <select id="response"><option value=".55">Snappy</option><option value="1" selected>Fluid</option><option value="1.8">Dreamy</option></select></label></div>
-          <p class="helper">Real filtered energy with eased attack and release. Frequency bands overlap at their filter slopes; they don’t isolate instruments.</p>
+          <p class="helper" id="analysis-note">Real filtered energy with eased attack and release. Frequency bands overlap at their filter slopes; they don’t isolate instruments.</p>
         </section>
       </section>
       <aside class="panel effects-panel" aria-label="Effect controls">

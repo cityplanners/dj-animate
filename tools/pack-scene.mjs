@@ -33,12 +33,12 @@ export async function packScene(inputFile, { id, baseURL = 'https://dj.cityplann
     if (!Array.isArray(project.layers)) throw new Error('The scene needs a layers array.');
     const layers = [];
     for (const l of project.layers) layers.push({ ...l, data: undefined, src: await asset(l.src, 'image') });
-    const audio = project.audio ? { ...project.audio, data: undefined, src: await asset(project.audio.src, 'audio') } : null;
+    const audio = project.audio?.source === 'youtube' ? project.audio : project.audio ? { ...project.audio, data: undefined, src: await asset(project.audio.src, 'audio') } : null;
     const manifestURL = new URL(`scenes/${id}/scene.djscene.json`, site);
     const normalized = normalizeScene({ ...project, layers, audio }, manifestURL.href);
     // Validate absolute references, then retain portable paths for either hostname.
     normalized.layers.forEach((l, i) => { l.src = layers[i].src; });
-    if (normalized.audio) normalized.audio.src = audio.src;
+    if (normalized.audio && normalized.audio.source !== 'youtube') normalized.audio.src = audio.src;
     if (project.source?.src) normalized.source = { src: await asset(project.source.src, 'image'), note: String(project.source.note || '').slice(0, 500) };
     await writeFile(path.join(staging, 'scene.djscene.json'), JSON.stringify(normalized, null, 2) + '\n');
     if (replace) await rm(output, { recursive: true, force: true });

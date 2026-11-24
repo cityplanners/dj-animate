@@ -1,5 +1,6 @@
 import { clamp } from './dsp.mjs';
 import { preset } from './effects.mjs';
+import { parseYouTube } from './youtube.mjs';
 
 export const SCENE_FORMAT = 'dj-animate';
 export const MAX_LAYERS = 20;
@@ -36,13 +37,17 @@ export function normalizeScene(project, baseURL) {
     const saved = Array.isArray(project.effects) ? project.effects.find(e => e.id === effect.id) : null;
     return saved ? { ...effect, on: saved.on === true, amount: sceneFinite(saved.amount, effect.amount, 0, 1), band: Math.round(sceneFinite(saved.band, effect.band, 0, 3)) } : effect;
   });
+  const savedAudio = project.audio?.source === 'youtube'
+    ? { source: 'youtube', url: parseYouTube(project.audio.url).url }
+    : project.audio ? { name: String(project.audio.name || 'Scene music').slice(0, 120), src: assetURL(project.audio.src || project.audio.data, baseURL, 'audio') } : null;
+  const sourceStart = savedAudio?.source === 'youtube' ? parseYouTube(savedAudio.url).start : 0;
   return {
     format: SCENE_FORMAT, version: 1, title: String(project.title || 'Your scene').slice(0, 120),
     canvas: { width, height },
     state: { master: sceneFinite(project.state?.master, .65, 0, 1.5), gain: sceneFinite(project.state?.gain, 1, 0, 2), response: [.55, 1, 1.8].includes(project.state?.response) ? project.state.response : 1 },
-    selection: { start: sceneFinite(project.selection?.start, 0, 0, 1800), end: sceneFinite(project.selection?.end, 5, 0, 1800) },
+    selection: { start: sceneFinite(project.selection?.start, sourceStart, 0, 1800), end: sceneFinite(project.selection?.end, Math.min(1800, sourceStart + 5), 0, 1800) },
     effects,
-    audio: project.audio ? { name: String(project.audio.name || 'Scene music').slice(0, 120), src: assetURL(project.audio.src || project.audio.data, baseURL, 'audio') } : null,
+    audio: savedAudio,
     layers: project.layers.map(l => {
       const background = l.role === 'background';
       return {
@@ -60,6 +65,10 @@ export function normalizeScene(project, baseURL) {
 export function sceneRequest(href) {
   const url = new URL(href), query = url.searchParams, hash = new URLSearchParams(url.hash.slice(1));
   const overrides = {};
+  if (query.has('yt') || query.has('youtube')) {
+    if (query.has('yt') && query.has('youtube')) throw new Error('Use one YouTube audio link.');
+    overrides.youtube = parseYouTube(query.get('yt') || query.get('youtube'));
+  }
   if (query.has('preset')) {
     if (!PRESETS.includes(query.get('preset'))) throw new Error('Unknown effect preset in the scene link.');
     overrides.preset = query.get('preset');
@@ -91,6 +100,10 @@ export function sceneRequest(href) {
 
 export function overrideScene(scene, overrides = {}) {
   const out = { ...scene, state: { ...scene.state }, selection: { ...scene.selection } };
+  if (overrides.youtube) {
+    out.audio = { source: 'youtube', url: overrides.youtube.url };
+    out.selection = { start: overrides.youtube.start, end: Math.min(1800, overrides.youtube.start + 5) };
+  }
   if (overrides.preset) out.effects = preset(overrides.preset);
   for (const key of ['master', 'gain', 'response']) if (overrides[key] !== undefined) out.state[key] = overrides[key];
   if (overrides.start !== undefined) out.selection.start = overrides.start;
@@ -103,7 +116,7 @@ export function makeSceneLink(project, href) {
   const references = [...(project.layers || []).map(l => l.src || l.data), ...(project.audio ? [project.audio.src || project.audio.data] : [])];
   if (references.some(src => /^(blob:|data:|file:)/i.test(src || ''))) throw new Error('Save a project to keep local uploads. A scene link needs hosted image and music files.');
   const normalized = normalizeScene(project, href);
-  const urls = [...normalized.layers.map(l => l.src), ...(normalized.audio ? [normalized.audio.src] : [])];
+  const urls = [...normalized.layers.map(l => l.src), ...(normalized.audio?.src ? [normalized.audio.src] : [])];
   if (urls.some(src => src.startsWith('data:'))) throw new Error('Save a project to keep local uploads. A scene link needs hosted image and music files.');
   const bytes = new TextEncoder().encode(JSON.stringify(normalized));
   const encoded = btoa(Array.from(bytes, b => String.fromCharCode(b)).join('')).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
