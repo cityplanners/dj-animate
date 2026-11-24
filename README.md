@@ -170,7 +170,7 @@ are limited to 30 minutes to bound analysis memory. The demo GIF is five seconds
 
 ## Validation for this package
 
-Scene-link and YouTube changes: 33 Node tests pass, covering YouTube URL parsing,
+Scene-link and YouTube changes: 34 Node tests pass, covering YouTube URL parsing,
 timestamps, saved audio references, live envelopes, seeking and failure handling,
 the original GTA default, Unicode link round trips,
 URL bounds, streamed manifest size limits, safe packaging, legacy embedded

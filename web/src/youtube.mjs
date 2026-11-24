@@ -51,7 +51,7 @@ export function youtubeError(code) {
 export class YouTubeTransport extends EventTarget {
   constructor({ element, origin, onChange = () => {}, onFailure = () => {}, loader = loadYouTubeAPI }) {
     super(); Object.assign(this, { element, origin, onChange, onFailure, loader });
-    this.ready = false; this.loop = true; this.error = null; this.seeking = false; this.closed = false; this.lastDuration = 0;
+    this.ready = false; this.loop = true; this.error = null; this.seeking = false; this.closed = false; this.lastDuration = 0; this.playRequested = false;
   }
   async open(source) {
     this.source = parseYouTube(source);
@@ -88,28 +88,35 @@ export class YouTubeTransport extends EventTarget {
   }
   get duration() { const n = this.player?.getDuration?.() || 0; return Number.isFinite(n) ? Math.min(1800, Math.max(0, n)) : 0; }
   get readyState() { return this.ready && !this.error && this.duration > 0 ? 2 : 0; }
-  get paused() { return ![1, 3].includes(this.player?.getPlayerState?.()); }
-  get buffering() { return this.player?.getPlayerState?.() === 3; }
+  get paused() { return !this.playRequested && ![1, 3].includes(this.player?.getPlayerState?.()); }
+  get buffering() { return this.playRequested || this.player?.getPlayerState?.() === 3; }
   get ended() { return this.player?.getPlayerState?.() === 0; }
   get currentTime() { return Math.max(0, this.player?.getCurrentTime?.() || 0); }
   set currentTime(seconds) { if (this.ready) this.player.seekTo(clamp(seconds, 0, this.duration || 1800), true); }
   async play(timeout = 15000) {
     if (this.error) throw this.error;
     if (!this.ready) throw new Error('Wait for the YouTube player to load.');
+    this.playRequested = true; this.onChange();
     await new Promise((resolve, reject) => {
-      const finish = error => { clearTimeout(timer); this.removeEventListener('statechange', check); this.removeEventListener('error', check); this.removeEventListener('close', check); error ? reject(error) : resolve(); };
+      let settled = false;
+      const finish = error => {
+        if (settled) return; settled = true; this.playRequested = false;
+        clearTimeout(timer); this.removeEventListener('statechange', check); this.removeEventListener('error', check); this.removeEventListener('close', check); this.removeEventListener('pause-request', check);
+        this.onChange(); error ? reject(error) : resolve();
+      };
       const check = event => {
         if (this.closed || this.error) { finish(this.error || new DOMException('YouTube was closed.', 'AbortError')); return; }
+        if (event?.type === 'pause-request') { finish(new DOMException('YouTube playback was paused.', 'AbortError')); return; }
         const state = this.player.getPlayerState();
         if (state === 1) finish();
         else if (state === 2 && event?.type === 'statechange') finish(new DOMException('YouTube playback was paused.', 'AbortError'));
       };
       const timer = setTimeout(() => { finish(new Error('YouTube is still buffering. Try Play inside its player, another link, or a music file.')); this.pause(); }, timeout);
-      this.addEventListener('statechange', check); this.addEventListener('error', check); this.addEventListener('close', check);
+      this.addEventListener('statechange', check); this.addEventListener('error', check); this.addEventListener('close', check); this.addEventListener('pause-request', check);
       try { this.player.playVideo(); check(); } catch (error) { finish(error); }
     });
   }
-  pause() { if (this.ready) this.player.pauseVideo(); }
+  pause() { this.playRequested = false; if (this.ready) this.player.pauseVideo(); this.dispatchEvent(new Event('pause-request')); this.onChange(); }
   tick() {
     if (this.closed) return;
     if (this.duration && this.duration !== this.lastDuration) { this.lastDuration = this.duration; this.dispatchEvent(new Event('loadedmetadata')); this.onChange(); }

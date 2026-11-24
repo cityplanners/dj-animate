@@ -112,6 +112,16 @@ test('restarting a paused YouTube player waits for its asynchronous play acknowl
     await media.play(1000); assert.equal(media.paused, false);
   } finally { media.destroy(); }
 });
+test('a play request can be cancelled even before YouTube acknowledges any state change', async () => {
+  const fixture = playerFixture(); const media = new YouTubeTransport({ element: {}, origin: base, loader: async () => fixture.api });
+  try {
+    await media.open(id); fixture.player.playVideo = () => {};
+    const pending = media.play(1000);
+    assert.equal(media.paused, false); assert.equal(media.buffering, true);
+    media.pause(); await assert.rejects(pending, error => error.name === 'AbortError');
+    assert.equal(media.paused, true); assert.equal(media.buffering, false);
+  } finally { media.destroy(); }
+});
 test('scene packaging retains a canonical YouTube source instead of downloading media', async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), 'dj-youtube-'));
   try {
