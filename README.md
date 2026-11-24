@@ -1,9 +1,17 @@
-# dj-animate 0.2
+# dj-animate 0.3
 
 Space Pirates' layered music animation studio. Static HTML, CSS, ES modules,
 Web Audio and WebGL. No build dependencies, accounts, monthly services, or server.
 
 Music Videos: Unchained. Source: `cityplanners/dj-animate`.
+
+Say **dj-animate it** with an illustration to prepare its layers and open them
+through a scene link. [Open the First Order example](https://cityplanners.github.io/dj-animate/?scene=first-order).
+The normal website keeps its original GTA storefront and Pendragon sprites;
+chat scene imports apply only when their specific link is opened.
+The studio supports published scene manifests, URL settings, copying edited
+scene links, individual layer audio routes, and canvas sizes such as 32:9.
+See [the scene preparation and link protocol](docs/scene-links.md).
 
 ## Run
 
@@ -150,14 +158,21 @@ Official references:
 
 Preview and recording are real-time and depend on browser/GPU speed. Frame rate
 may drop on large scenes. The graph and motion still use the audio clock, but a
-browser recording is not a deterministic offline renderer. WebGL uses the native
-720p canvas; devices without WebGL use a 480×270 Canvas fallback with the same
-effects, scaled to the 720p export canvas. Canvas capture/MediaRecorder are
+browser recording is not a deterministic offline renderer. WebGL uses the
+scene's configured canvas; devices without WebGL use a 480–960-pixel-wide Canvas
+fallback with the same aspect ratio and effects, scaled to the export canvas. Canvas capture/MediaRecorder are
 required for video export. GIFs
 are silent; use the browser's video export to include audio. Uploaded tracks
 are limited to 30 minutes to bound analysis memory. The demo GIF is five seconds.
 
 ## Validation for this package
+
+Scene-link changes: 23 Node tests pass, covering the original GTA default, Unicode link round trips,
+URL bounds, streamed manifest size limits, safe packaging, legacy embedded
+projects and executable offline bundles. The actual software compositor renders
+the three-layer 32:9 example. Live browser playback/export for this update still
+needs a smoke test after deployment; the local browser was unavailable. The
+browser checks below describe the previously validated base editor.
 
 - Node tests cover browser/offline envelope parity, clip bounds, saved range
   restoration, and waiting for media seeking before export.

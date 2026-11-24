@@ -29,12 +29,12 @@
   <header class="topbar">
     <a class="brand" href="./" aria-label="dj-animate home"><img src="./assets/mark.svg" alt=""><span>dj<span class="brand-dash">—</span>animate<small>SPACE PIRATES · MOTION STUDIO</small></span></a>
     <nav aria-label="Studio navigation"><a href="#studio" class="active">Studio</a><a href="#waves">Audio lab</a><a href="#guide">Field guide</a></nav>
-    <div class="top-actions"><span class="local-badge">Runs on your device</span><button id="save-project" class="button quiet">Save project</button></div>
+    <div class="top-actions"><button id="copy-link" class="button quiet">Copy scene link</button><button id="save-project" class="button quiet">Save project</button></div>
   </header>
   <main>
     <section class="intro" id="studio">
       <div><p class="eyebrow">THE CITY NEVER STANDS STILL</p><h1>Give your scene <em>a pulse.</em></h1><p class="intro-copy">Your layers. Your music. A little beautiful distortion.</p></div>
-      <div class="session"><span class="session-tag">AFTER HOURS / 001</span><strong id="scene-label">Pendragon × Backseat</strong><span>16:9 <i>·</i> 720p <i>·</i> 30 fps</span></div>
+      <div class="session"><span class="session-tag">AFTER HOURS / 001</span><strong id="scene-label">Pendragon × Backseat</strong><span id="frame-detail">16:9 · 1280 × 720 · 30 fps</span></div>
     </section>
     <div class="studio-layout">
       <aside class="panel layers-panel" aria-label="Scene layers">
@@ -47,7 +47,7 @@
       </aside>
       <section class="center-column" aria-label="Animation preview and audio">
         <div class="stage-panel">
-          <div class="stage-topline"><span><span class="live-dot"></span> LIVE PREVIEW</span><div><button id="fullscreen" class="text-button">Full screen</button><span class="pill">16:9</span></div></div>
+          <div class="stage-topline"><span><span class="live-dot"></span> LIVE PREVIEW</span><div><button id="fullscreen" class="text-button">Full screen</button><span class="pill" id="frame-ratio">16:9</span></div></div>
           <div class="stage-wrap"><canvas id="stage" width="1280" height="720" aria-label="Layered music-reactive scene preview"></canvas><div id="loading" class="loading">Building your scene…</div><span class="stage-watermark">SPACE PIRATES</span></div>
           <div class="transport"><button id="play" class="play-button" aria-label="Play audio">▶</button><div class="transport-track"><strong id="track-name">Backseat <span>— DÊTRE</span></strong><span id="track-detail">5-second study · 00:40–00:45 of the original track</span></div><span id="time" class="time">00:00 / 00:05</span><label class="loop-control"><input id="loop" type="checkbox" checked>Loop</label></div>
           <label class="sr-only" for="seek">Audio position</label><input type="range" id="seek" class="seek" min="0" max="5" value="0" step="0.01">
@@ -79,10 +79,11 @@
       </aside>
     </div>
     <section class="field-guide" id="guide"><div><p class="eyebrow">BUILD THE SHOT, THEN BEND IT</p><h2>Layers before motion.<br><em>Feeling before frequency.</em></h2></div><ol><li><strong>Dissect the scene.</strong><span>Start with a clean background and transparent sprites. This editor composites your prepared layers.</span></li><li><strong>Find the four curves.</strong><span>Load music to analyze bass, body, upper mids, and highs. Response smoothing gives each move weight.</span></li><li><strong>Route, mix, export.</strong><span>Toggle distortions, drag the selection handles to choose a clip, and export that range with audio. Save a project to keep its assets and settings.</span></li></ol></section>
-    <footer><strong>SPACE PIRATES</strong><span>dj-animate / 0.2 <i>·</i> Built for the after hours.</span><a href="./assets/backseat-sample.gif" download>Download sample GIF</a><span>Photos and music stay in this browser.</span></footer>
+    <footer><strong>SPACE PIRATES</strong><span>dj-animate / 0.3 <i>·</i> Built for the after hours.</span><a href="./assets/backseat-sample.gif" download>Download sample GIF</a><span>Uploads stay on your device. Scene links use published assets.</span></footer>
   </main>
   <audio id="audio" preload="auto" loop src="./assets/backseat-40-45.mp3"></audio>
   <div id="toast" role="alert" hidden></div>
+  <dialog id="link-dialog"><form method="dialog"><h2>Your scene link</h2><p>Copy this link to reopen these layers and settings.</p><label for="scene-link" class="sr-only">Scene link</label><textarea id="scene-link" readonly rows="4"></textarea><button class="button quiet">Close</button></form></dialog>
   <script type="module" src="./src/app.mjs"></script>
 </body>
 </html>

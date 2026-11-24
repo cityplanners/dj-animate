@@ -1,0 +1,195 @@
+{
+  "format": "dj-animate",
+  "version": 1,
+  "title": "First Order \u00b7 Wanted",
+  "canvas": {
+    "width": 2560,
+    "height": 720
+  },
+  "state": {
+    "master": 0.55,
+    "gain": 1,
+    "response": 1.8
+  },
+  "selection": {
+    "start": 0,
+    "end": 5
+  },
+  "effects": [
+    {
+      "id": "breathe",
+      "name": "Bass breathe",
+      "icon": "\u25c9",
+      "band": 0,
+      "amount": 0.18,
+      "on": true,
+      "scope": "Layer motion",
+      "detail": "Foot-anchored pulse and eased scale."
+    },
+    {
+      "id": "parallax",
+      "name": "Depth drift",
+      "icon": "\u25b1",
+      "band": 1,
+      "amount": 0.25,
+      "on": true,
+      "scope": "Layer motion",
+      "detail": "Layers move at different speeds according to depth."
+    },
+    {
+      "id": "rgb",
+      "name": "Prism split",
+      "icon": "\u25c8",
+      "band": 3,
+      "amount": 0.1,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Separate red and blue around bright edges."
+    },
+    {
+      "id": "ripple",
+      "name": "Shockwave",
+      "icon": "\u25ce",
+      "band": 0,
+      "amount": 0.3,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Concentric ripples sweep out from the center."
+    },
+    {
+      "id": "liquid",
+      "name": "Heat haze",
+      "icon": "\u2248",
+      "band": 1,
+      "amount": 0.4,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Slow liquid refraction across the image."
+    },
+    {
+      "id": "echo",
+      "name": "Afterimage",
+      "icon": "\u25a7",
+      "band": 2,
+      "amount": 0.45,
+      "on": false,
+      "scope": "Scene",
+      "detail": "A fading history of the previous frames."
+    },
+    {
+      "id": "kaleido",
+      "name": "Kaleidoscope",
+      "icon": "\u2727",
+      "band": 2,
+      "amount": 0.4,
+      "on": false,
+      "scope": "Scene",
+      "detail": "A sixfold mirrored world, blended with the original."
+    },
+    {
+      "id": "vhs",
+      "name": "Tape drift",
+      "icon": "\u224b",
+      "band": 3,
+      "amount": 0.3,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Rolling VHS bands and displaced scan lines."
+    },
+    {
+      "id": "bloom",
+      "name": "Neon bloom",
+      "icon": "\u273a",
+      "band": 2,
+      "amount": 0.35,
+      "on": true,
+      "scope": "Scene",
+      "detail": "A warm halo around the brightest parts of the scene."
+    },
+    {
+      "id": "hue",
+      "name": "Sunset shift",
+      "icon": "\u25d0",
+      "band": 1,
+      "amount": 0.35,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Rotate the color palette with the music."
+    },
+    {
+      "id": "pixel",
+      "name": "Digital melt",
+      "icon": "\u25a6",
+      "band": 3,
+      "amount": 0.3,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Pixel blocks grow and dissolve with the hats."
+    },
+    {
+      "id": "tunnel",
+      "name": "Vertigo",
+      "icon": "\u25cc",
+      "band": 0,
+      "amount": 0.3,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Radial lens distortion and a subtle vortex."
+    }
+  ],
+  "audio": null,
+  "layers": [
+    {
+      "name": "Rocks \u00b7 clean background",
+      "src": "01-rocks.png",
+      "role": "background",
+      "visible": true,
+      "motion": false,
+      "x": 50,
+      "y": 50,
+      "scale": 1.015,
+      "opacity": 1,
+      "depth": -0.35,
+      "blend": "source-over",
+      "band": 0,
+      "pulse": 0,
+      "flicker": 0
+    },
+    {
+      "name": "DJ \u00b7 armored sprite",
+      "src": "02-dj.png",
+      "role": "sprite",
+      "visible": true,
+      "motion": true,
+      "x": 31.7,
+      "y": 103,
+      "scale": 1.05,
+      "opacity": 1,
+      "depth": 0.25,
+      "blend": "source-over",
+      "band": 0,
+      "pulse": 0.009,
+      "flicker": 0
+    },
+    {
+      "name": "Wanted \u00b7 hologram and beams",
+      "src": "03-hologram.png",
+      "role": "sprite",
+      "visible": true,
+      "motion": true,
+      "x": 56.7,
+      "y": 79,
+      "scale": 0.84,
+      "opacity": 1,
+      "depth": 0.25,
+      "blend": "screen",
+      "band": 3,
+      "pulse": 0,
+      "flicker": 0.1
+    }
+  ],
+  "source": {
+    "src": "04-original.png",
+    "note": "Original illustration retained. Prepared background, DJ and hologram are AI-generated derivatives for independent animation."
+  }
+}

@@ -1,4 +1,5 @@
 :root{color-scheme:dark;--bg:#17121e;--panel:#211a2b;--line:#3c3048;--muted:#b0a1bc;--text:#fff1f4;--pink:#ff79b3;--peach:#ffba86;--mint:#73e0d1;--radius:15px;font:16px/1.5 "Segoe UI",Arial,sans-serif}
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--pink);border-radius:15px;padding:24px;width:min(560px,90vw)}dialog::backdrop{background:#100b16b8}dialog textarea{display:block;width:100%;margin:14px 0;background:var(--bg);color:var(--text);border:1px solid var(--line);padding:10px;resize:vertical;overflow-wrap:anywhere}.top-actions{flex-wrap:wrap;justify-content:flex-end;gap:6px}
 .clip-editor{padding:17px 18px 10px;background:#19131f;border-bottom:1px solid var(--line)}
 .clip-heading{display:flex;align-items:center;gap:12px;color:var(--muted)}
 .clip-heading>span{font:600 .65rem monospace;letter-spacing:.1em;flex:1}.clip-heading>output{font:.875rem monospace;color:var(--peach)}

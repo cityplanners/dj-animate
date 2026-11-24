@@ -2,6 +2,7 @@ import { BANDS, clamp, analyzeAudio, energyAt, prepareEnvelopes } from './dsp.mj
 import { preset } from './effects.mjs';
 import { SceneRenderer } from './renderer.mjs';
 import { normalizeSelection, moveSelection, formatClipTime, formatClipDuration, seekMedia } from './selection.mjs';
+import { normalizeScene, sceneRequest, overrideScene, makeSceneLink, fetchSceneJSON } from './scene.mjs';
 const $ = id => document.getElementById(id);
 const audio = $('audio'), canvas = $('stage');
 let renderer, analysis, demoAnalysis, layers = [], selected = '', effects = preset('sunset');
@@ -9,6 +10,7 @@ let audioContext, mediaSource, recordBus, recorder, recordEnd = 0, audioFile = n
 let recordingLoop = true, toastTimer, serial = 0;
 let clip = normalizeSelection(5), exportBusy = false, exportPreparing = false;
 let dirty = true, lastAudioTime = -1;
+let sceneLoading = false, audioSourceURL = null;
 for (const event of ['input', 'click', 'change']) document.addEventListener(event, () => { dirty = true; });
 const state = { master: .65, gain: 1, response: 1 };
 const formatTime = s => `${String(Math.floor((s || 0) / 60)).padStart(2, '0')}:${String(Math.floor((s || 0) % 60)).padStart(2, '0')}`;
@@ -16,12 +18,17 @@ function toast(message) { $('toast').textContent = message; $('toast').hidden = 
 function fail(error) { console.error(error); toast(error.message || String(error)); $('status').textContent = 'Something needs attention.'; }
 function el(tag, className, text) { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; }
 function download(blob, filename) { const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
-const loadImage = src => new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = () => reject(new Error('An image could not be loaded. Use PNG, JPG, WebP, or a valid SVG.')); i.src = src; });
+const loadImage = src => new Promise((resolve, reject) => {
+  const i = new Image(), timeout = setTimeout(() => { i.src = ''; reject(new Error('An image took too long to load. Check its hosted URL.')); }, 20000);
+  if (/^https?:/i.test(new URL(src, document.baseURI).protocol)) i.crossOrigin = 'anonymous';
+  i.onload = () => { clearTimeout(timeout); i.naturalWidth * i.naturalHeight > 16777216 ? reject(new Error('Use images under 16 megapixels.')) : resolve(i); };
+  i.onerror = () => { clearTimeout(timeout); reject(new Error('An image could not be loaded. Remote hosts must allow cross-origin image access.')); }; i.src = src;
+});
 const fileData = blob => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(blob); });
-function layer(name, image, role, extra = {}) { return { id: `layer-${++serial}`, name, image, role, visible: true, motion: true, opacity: 1, scale: 1, depth: role === 'background' ? -.35 : 1, x: 50, y: role === 'background' ? 50 : 97, ...extra }; }
+function layer(name, image, role, extra = {}) { return { id: `layer-${++serial}`, name, image, role, visible: true, motion: true, opacity: 1, scale: 1, depth: role === 'background' ? -.35 : 1, x: 50, y: role === 'background' ? 50 : 97, blend: 'source-over', band: 0, pulse: 0, flicker: 0, ...extra }; }
 async function demoLayers() {
   const [bg, man] = await Promise.all([loadImage('./assets/storefront.png'), loadImage('./assets/pendragon.png')]);
-  const shadow = await loadImage('data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="55"><defs><radialGradient id="s"><stop stop-color="#100c22" stop-opacity=".55"/><stop offset="1" stop-color="#100c22" stop-opacity="0"/></radialGradient></defs><ellipse cx="200" cy="27" rx="198" ry="26" fill="url(#s)"/></svg>'));
+  const shadow = await loadImage('./assets/ground-shadow.svg');
   layers = [layer('Vice City storefront', bg, 'background', { scale: 1.04 }), layer('Ground shadow', shadow, 'sprite', { x: 49, y: 96, scale: .075, depth: .8, motion: false }), layer('Pendragon + album', man, 'sprite', { x: 49, scale: .98 })];
   selected = layers.at(-1).id; drawLayers();
 }
@@ -49,6 +56,13 @@ function drawLayers() {
   for (const [value, name] of [['sprite', 'Sprite'], ['background', 'Background']]) { const o = el('option', '', name); o.value = value; o.selected = l.role === value; role.append(o); }
   role.onchange = () => { l.role = role.value; l.y = role.value === 'background' ? 50 : 97; drawLayers(); }; roleLabel.append(role); box.append(roleLabel);
   range('Horizontal', 'x', -20, 120, .5); range('Vertical', 'y', -20, 120, .5); range('Scale', 'scale', .03, 3, .01); range('Opacity', 'opacity', 0, 1, .01); range('Depth', 'depth', -1, 2, .05);
+  const bandLabel = el('label', '', 'Layer audio band'), band = el('select');
+  BANDS.forEach((b, i) => { const option = el('option', '', b.name); option.value = i; option.selected = l.band === i; band.append(option); });
+  band.onchange = () => { l.band = Number(band.value); }; bandLabel.append(band); box.append(bandLabel);
+  range('Pulse', 'pulse', 0, .1, .001); range('Flicker', 'flicker', 0, .3, .01);
+  const blendLabel = el('label', '', 'Blend'), blend = el('select');
+  for (const [value, name] of [['source-over', 'Normal'], ['screen', 'Screen'], ['lighter', 'Add light']]) { const option = el('option', '', name); option.value = value; option.selected = l.blend === value; blend.append(option); }
+  blend.onchange = () => { l.blend = blend.value; }; blendLabel.append(blend); box.append(blendLabel);
   const moveLabel = el('label', 'check-label'), motion = el('input'); motion.type = 'checkbox'; motion.checked = l.motion; motion.onchange = () => { l.motion = motion.checked; }; moveLabel.append(motion, document.createTextNode('Animate this layer')); box.append(moveLabel);
   const actions = el('div', 'layer-buttons');
   for (const [name, delta] of [['Back', -1], ['Front', 1]]) { const b = el('button', '', name); b.onclick = () => { const i = layers.indexOf(l), j = clamp(i + delta, 0, layers.length - 1); [layers[i], layers[j]] = [layers[j], layers[i]]; drawLayers(); }; actions.append(b); }
@@ -114,11 +128,12 @@ function ensureAudio() {
 }
 function syncSelection(editingInput = '') {
   const duration = analysis?.duration || 0;
+  const locked = busy || exportBusy || sceneLoading;
   if (duration) clip = normalizeSelection(duration, clip);
   for (const [id, value] of [['clip-start', clip.start], ['clip-end', clip.end], ['clip-start-time', clip.start], ['clip-end-time', clip.end]]) {
     $(id).max = duration || 5;
     if (id !== editingInput) $(id).value = Number(value.toFixed(3));
-    $(id).disabled = busy || exportBusy || !duration;
+    $(id).disabled = locked || !duration;
   }
   $('clip-start').setAttribute('aria-valuetext', formatClipTime(clip.start));
   $('clip-end').setAttribute('aria-valuetext', formatClipTime(clip.end));
@@ -126,9 +141,9 @@ function syncSelection(editingInput = '') {
   $('clip-timecode').value = `${formatClipTime(clip.start)} – ${formatClipTime(clip.end)}`;
   $('clip-highlight').style.left = `${duration ? clip.start / duration * 100 : 0}%`;
   $('clip-highlight').style.width = `${duration ? (clip.end - clip.start) / duration * 100 : 100}%`;
-  $('clip-full').disabled = busy || exportBusy || !duration;
-  for (const id of ['seek', 'play', 'loop', 'audio-file', 'project-file']) $(id).disabled = busy || exportBusy || !duration;
-  $('record').disabled = busy || exportPreparing || !duration;
+  $('clip-full').disabled = locked || !duration;
+  for (const id of ['seek', 'play', 'loop', 'audio-file', 'project-file', 'layer-files', 'save-project', 'copy-link', 'reset-scene']) $(id).disabled = locked || !duration;
+  $('record').disabled = busy || sceneLoading || exportPreparing || !duration;
   if (!exportBusy) $('record').textContent = `Export ${formatClipDuration(clip.end - clip.start)}`;
   dirty = true;
 }
@@ -140,7 +155,7 @@ function changeSelection(edge, value, editingInput = '') {
 }
 function restoreDemoAudio() {
   if (audio.dataset.objectUrl) { URL.revokeObjectURL(audio.dataset.objectUrl); delete audio.dataset.objectUrl; }
-  audioFile = null; audio.src = './assets/backseat-40-45.mp3';
+  audioFile = null; audioSourceURL = null; audio.src = './assets/backseat-40-45.mp3';
   analysis = { ...demoAnalysis, curves: prepareEnvelopes(demoAnalysis.raw, demoAnalysis.rate, state.response) };
   $('track-name').replaceChildren(document.createTextNode('Backseat '), el('span', '', '— DÊTRE'));
   $('track-detail').textContent = '5-second study · 00:40–00:45 of the original track';
@@ -194,6 +209,7 @@ async function record() {
   }
 }
 async function addFiles(files) {
+  if (sceneLoading || exportBusy) return;
   const chosen = [...files].filter(f => f.type.startsWith('image/'));
   if (!chosen.length) { toast('Choose an image file for a sprite layer.'); return; }
   for (const file of chosen.slice(0, Math.max(0, 20 - layers.length))) {
@@ -203,7 +219,7 @@ async function addFiles(files) {
   }
   drawLayers(); $('scene-label').textContent = 'Your scene'; $('status').textContent = 'Layer added. Select it to position and scale.';
 }
-async function loadAudio(file) {
+async function loadAudio(file, { throwErrors = false } = {}) {
   if (!file || busy || exportBusy) return;
   busy = true; audio.pause(); $('status').textContent = 'Analyzing four frequency bands…'; syncSelection();
   try {
@@ -212,52 +228,100 @@ async function loadAudio(file) {
     if (buffer.duration > 1800) throw new Error('For this browser editor, use audio under 30 minutes.');
     const result = await analyzeAudio(buffer);
     if (audio.dataset.objectUrl) URL.revokeObjectURL(audio.dataset.objectUrl);
-    const url = URL.createObjectURL(file); audio.dataset.objectUrl = url; audio.src = url; audioFile = file;
+    const url = URL.createObjectURL(file); audio.dataset.objectUrl = url; audio.src = url; audioFile = file; audioSourceURL = null;
     analysis = result; analysis.curves = prepareEnvelopes(analysis.raw, analysis.rate, state.response);
     clip = normalizeSelection(buffer.duration);
     $('track-name').textContent = file.name; $('track-detail').textContent = `${formatTime(buffer.duration)} · four bands analyzed locally`;
     $('seek').max = buffer.duration; $('status').textContent = 'Your music is ready. Press play.';
-  } catch (e) { fail(e); }
+  } catch (e) { if (throwErrors) throw e; fail(e); }
   finally { busy = false; syncSelection(); }
 }
 async function saveProject() {
   const button = $('save-project'); button.disabled = true;
   try {
     const savedLayers = await Promise.all(layers.map(async l => {
-      const { image, objectURL, ...settings } = l;
+      const { image, objectURL, src, ...settings } = l;
       const data = await fileData(await (await fetch(image.src)).blob()); return { ...settings, data };
     }));
-    const project = { format: 'dj-animate', version: 1, canvas: { width: 1280, height: 720 }, state, selection: { ...clip }, effects, layers: savedLayers, audio: audioFile ? { name: audioFile.name, data: await fileData(audioFile) } : null };
+    const project = { format: 'dj-animate', version: 1, title: $('scene-label').textContent, canvas: { width: canvas.width, height: canvas.height }, state, selection: { ...clip }, effects, layers: savedLayers, audio: audioFile ? { name: audioFile.name, data: await fileData(audioFile) } : null };
     download(new Blob([JSON.stringify(project)], { type: 'application/json' }), 'my-scene.djscene.json'); toast('Project saved with its image assets and any music you loaded.');
   } catch (e) { fail(e); } finally { button.disabled = false; }
 }
+function setCanvasSize(width, height) {
+  canvas.width = width; canvas.height = height; renderer.resize();
+  canvas.parentElement.style.aspectRatio = `${width} / ${height}`;
+  const gcd = (a, b) => b ? gcd(b, a % b) : a, divisor = gcd(width, height);
+  const ratio = `${width / divisor}:${height / divisor}`;
+  $('frame-ratio').textContent = ratio;
+  $('frame-detail').textContent = `${ratio} · ${width} × ${height} · 30 fps`;
+}
+function currentProject() {
+  return { format: 'dj-animate', version: 1, title: $('scene-label').textContent,
+    canvas: { width: canvas.width, height: canvas.height }, state: { ...state }, selection: { ...clip }, effects,
+    layers: layers.map(({ image, objectURL, ...settings }) => ({ ...settings, src: image.src })),
+    audio: audioFile ? { name: audioFile.name, src: audioSourceURL || audio.src } : null };
+}
+function applyControls(scene) {
+  Object.assign(state, scene.state); effects = scene.effects;
+  $('master').value = state.master; $('master-value').value = Math.round(state.master * 100) + '%';
+  $('gain').value = state.gain; $('gain-value').value = state.gain.toFixed(2) + '×'; $('response').value = state.response;
+  if (analysis) analysis.curves = prepareEnvelopes(analysis.raw, analysis.rate, state.response);
+  clip = normalizeSelection(analysis.duration, scene.selection);
+  drawEffects(); clearPreset(); syncSelection(); renderer.clearHistory();
+}
+async function applyScene(project, baseURL = document.baseURI, overrides = {}) {
+  const scene = overrideScene(normalizeScene(project, baseURL), overrides);
+  const imported = await Promise.all(scene.layers.map(async ({ src, name, role, ...settings }) => layer(name, await loadImage(src), role, settings)));
+  if (scene.audio) {
+    const response = await fetch(scene.audio.src, { credentials: 'omit', mode: 'cors', signal: AbortSignal.timeout(45000) });
+    if (!response.ok) throw new Error('Scene music could not be loaded. Check its URL and cross-origin access.');
+    if (Number(response.headers.get('content-length')) > 134217728) throw new Error('Use music files under 128 MiB.');
+    const blob = await response.blob();
+    if (blob.size > 134217728) throw new Error('Use music files under 128 MiB.');
+    await loadAudio(new File([blob], scene.audio.name, { type: blob.type }), { throwErrors: true });
+    audioSourceURL = scene.audio.src;
+  } else restoreDemoAudio();
+  audio.pause();
+  layers.forEach(l => { if (l.objectURL) URL.revokeObjectURL(l.objectURL); });
+  layers = imported; selected = layers.at(-1).id;
+  setCanvasSize(scene.canvas.width, scene.canvas.height); applyControls(scene); drawLayers();
+  $('scene-label').textContent = scene.title;
+  await seekMedia(audio, clip.start);
+  $('status').textContent = 'Scene loaded. Press play to animate, or load your music.';
+}
 async function openProject(file) {
-  if (!file || busy || exportBusy) return;
+  if (!file || busy || exportBusy || sceneLoading) return;
+  sceneLoading = true; syncSelection(); audio.pause();
   try {
     const p = JSON.parse(await file.text());
-    if (p.format !== 'dj-animate' || p.version !== 1 || !Array.isArray(p.layers) || p.layers.length > 20) throw new Error('Choose a dj-animate version 1 project with up to 20 layers.');
-    const imported = await Promise.all(p.layers.map(async l => {
-      if (typeof l.data !== 'string' || !/^data:image\//.test(l.data)) throw new Error('Project images must be embedded in the project file.');
-      const settings = Object.fromEntries(['scale', 'opacity', 'x', 'y', 'depth'].map(k => {
-        if (!Number.isFinite(l[k])) throw new Error('A layer contains an invalid transform.');
-        const bounds = { scale: [.03, 3], opacity: [0, 1], x: [-20, 120], y: [-20, 120], depth: [-1, 2] }[k];
-        return [k, clamp(l[k], ...bounds)];
-      }));
-      return layer(String(l.name || 'Sprite'), await loadImage(l.data), l.role === 'background' ? 'background' : 'sprite', { ...settings, visible: l.visible !== false, motion: l.motion !== false });
-    }));
-    audio.pause(); layers.forEach(l => { if (l.objectURL) URL.revokeObjectURL(l.objectURL); }); layers = imported; selected = layers.at(-1)?.id || '';
-    effects = preset('sunset').map(e => { const found = p.effects?.find(x => x.id === e.id); return found ? { ...e, on: !!found.on, amount: Number.isFinite(found.amount) ? clamp(found.amount) : e.amount, band: Number.isInteger(found.band) ? clamp(found.band, 0, 3) : e.band } : e; });
-    for (const [key, min, max] of [['master', 0, 1.5], ['gain', 0, 2], ['response', .55, 1.8]]) if (Number.isFinite(p.state?.[key])) state[key] = clamp(p.state[key], min, max);
-    $('master').value = state.master; $('master-value').value = Math.round(state.master * 100) + '%'; $('gain').value = state.gain; $('gain-value').value = state.gain.toFixed(2) + '×'; $('response').value = state.response;
-    if (analysis) analysis.curves = prepareEnvelopes(analysis.raw, analysis.rate, state.response);
-    if (p.audio) {
-      if (typeof p.audio.data !== 'string' || !/^data:(audio|video|application\/octet-stream)/.test(p.audio.data)) throw new Error('Invalid embedded audio.');
-      const blob = await (await fetch(p.audio.data)).blob(); await loadAudio(new File([blob], String(p.audio.name || 'music.mp3'), { type: blob.type }));
-    } else restoreDemoAudio();
-    clip = normalizeSelection(analysis.duration, p.selection); syncSelection();
-    drawLayers(); drawEffects(); clearPreset(); renderer.clearHistory(); $('scene-label').textContent = file.name.replace('.djscene.json', ''); toast('Project opened.');
+    await applyScene({ ...p, title: p.title || file.name.replace('.djscene.json', '') });
+    toast('Project opened.');
   } catch (e) { fail(e); }
+  finally { sceneLoading = false; syncSelection(); }
 }
+async function openSceneLink() {
+  if (sceneLoading || busy || exportBusy) return;
+  let request;
+  try { request = sceneRequest(location.href); } catch (e) { fail(e); return; }
+  if (!request) return;
+  sceneLoading = true; audio.pause(); syncSelection(); $('status').textContent = 'Opening your prepared scene…';
+  try {
+    if (request.manifestURL || request.project) {
+      const p = request.project || await fetchSceneJSON(request.manifestURL);
+      await applyScene(p, request.manifestURL || request.baseURL, request.overrides);
+    } else applyControls(overrideScene(normalizeScene(currentProject(), document.baseURI), request.overrides));
+  } catch (e) { fail(e); }
+  finally { sceneLoading = false; syncSelection(); }
+}
+async function copySceneLink() {
+  try {
+    const url = makeSceneLink(currentProject(), location.href);
+    $('scene-link').value = url;
+    try { await navigator.clipboard.writeText(url); toast('Scene link copied, including layers, effects and clip range.'); }
+    catch { $('link-dialog').showModal(); $('scene-link').select(); }
+  } catch (e) { toast(e.message); }
+}
+
 function bind() {
   $('play').onclick = async () => { try { if (audio.paused) { await ensureAudio(); if (audio.ended) audio.currentTime = 0; await audio.play(); } else audio.pause(); } catch (e) { fail(e); } };
   audio.onplay = () => { $('play').textContent = 'Ⅱ'; $('play').setAttribute('aria-label', 'Pause audio'); };
@@ -285,9 +349,11 @@ function bind() {
   $('master').oninput = () => { state.master = Number($('master').value); $('master-value').value = Math.round(state.master * 100) + '%'; };
   $('gain').oninput = () => { state.gain = Number($('gain').value); $('gain-value').value = state.gain.toFixed(2) + '×'; };
   $('response').onchange = () => { state.response = Number($('response').value); if (analysis) analysis.curves = prepareEnvelopes(analysis.raw, analysis.rate, state.response); };
-  $('record').onclick = record; $('save-project').onclick = saveProject;
+  $('record').onclick = record; $('save-project').onclick = saveProject; $('copy-link').onclick = copySceneLink;
   $('project-file').onchange = e => openProject(e.target.files[0]);
-  $('reset-scene').onclick = () => { demoLayers().catch(fail); $('scene-label').textContent = 'Pendragon × Backseat'; };
+  $('reset-scene').onclick = () => { setCanvasSize(1280, 720); demoLayers().catch(fail); $('scene-label').textContent = 'Pendragon × Backseat'; };
+  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#scene=')) openSceneLink(); });
+  window.addEventListener('popstate', openSceneLink);
   $('fullscreen').onclick = () => { const wrap = canvas.parentElement; (document.fullscreenElement ? document.exitFullscreen() : wrap.requestFullscreen()).catch(fail); };
   $('wave-graph').onclick = e => { if (exportBusy) return; const c = $('wave-graph'), r = c.getBoundingClientRect(); const fraction = clamp((e.clientX - r.left - 26) / (r.width - 34)); audio.currentTime = Number(c.dataset.start || 0) + fraction * Number(c.dataset.span || 5); renderer.clearHistory(); };
   document.addEventListener('keydown', e => { if (e.code === 'Space' && !['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA'].includes(e.target.tagName)) { e.preventDefault(); $('play').click(); } });
@@ -313,7 +379,9 @@ async function boot() {
     analysis = { ...demoAnalysis, curves: prepareEnvelopes(demoAnalysis.raw, demoAnalysis.rate, state.response) };
     clip = normalizeSelection(analysis.duration); syncSelection();
     $('loading').hidden = true;
-    if (renderer.mode === 'canvas') $('status').textContent = 'Canvas compatibility preview · export at 720p.';
+    if (renderer.mode === 'canvas') $('status').textContent = 'Canvas compatibility preview.';
+    const embedded = $('embedded-scene');
+    if (embedded) await applyScene(JSON.parse(embedded.textContent)); else await openSceneLink();
     requestAnimationFrame(frame);
   } catch (e) { $('loading').textContent = e.message; fail(e); }
 }

@@ -1,6 +1,6 @@
 {
   "name": "dj-animate",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "A browser-local, layered music animation studio for Space Pirates.",
@@ -8,7 +8,8 @@
     "dev": "node tools/serve.mjs",
     "build": "node tools/build.mjs",
     "bundle:offline": "node tools/standalone.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "scene:pack": "node tools/pack-scene.mjs"
   },
   "engines": { "node": ">=20" }
 }

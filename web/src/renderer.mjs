@@ -1,4 +1,5 @@
 import { effectValues } from './effects.mjs';
+import { layerPulse } from './scene.mjs';
 const VERTEX = `attribute vec2 position; varying vec2 uv; void main(){uv=position*.5+.5;gl_Position=vec4(position,0.,1.);}`;
 const FRAGMENT = `precision mediump float;
 varying vec2 uv; uniform sampler2D image; uniform sampler2D history;
@@ -70,6 +71,12 @@ export class SceneRenderer {
     const gl = this.gl; gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.textures[1]);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.canvas.width, this.canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
   }
+  resize() {
+    const { canvas, gl } = this;
+    this.work.width = canvas.width; this.work.height = canvas.height;
+    gl.useProgram(this.program); gl.uniform2f(this.uniforms.resolution, canvas.width, canvas.height);
+    this.clearHistory(); this.previousTime = -1;
+  }
   render(layers, effects, bands, t, master = 1, playing = true) {
     const { canvas, ctx, gl } = this, W = canvas.width, H = canvas.height;
     const fx = effectValues(effects, bands, master);
@@ -82,10 +89,11 @@ export class SceneRenderer {
       const base = layer.role === 'background' ? Math.max(W / naturalW, H / naturalH) : H * .93 / naturalH;
       const motion = layer.motion ? 1 : 0, depth = layer.depth;
       const breathing = fx.breathe * .025 * motion;
-      const scale = base * layer.scale * (1 + breathing);
+      const pulse = layerPulse(layer, bands, master);
+      const scale = base * layer.scale * (1 + breathing) * pulse.scale;
       const driftX = Math.sin(t * .42) * 18 * fx.parallax * depth * motion;
       const driftY = Math.cos(t * .33) * 5 * fx.parallax * depth * motion;
-      ctx.save(); ctx.globalAlpha = layer.opacity;
+      ctx.save(); ctx.globalAlpha = pulse.alpha; ctx.globalCompositeOperation = layer.blend || 'source-over';
       const px = layer.x / 100 * W + driftX, py = layer.y / 100 * H + driftY;
       ctx.translate(px, py);
       const anchored = layer.role !== 'background';
@@ -108,27 +116,33 @@ export class SceneRenderer {
 }
 
 // Canvas fallback keeps the full editor usable on devices without WebGL.
-// It evaluates the same UV effects at 480 pixels wide, then scales to the export canvas.
+// Keep at least the original fallback's vertical detail in ultrawide scenes.
 class SoftwareRenderer {
   constructor(canvas) {
     this.canvas = canvas; this.mode = 'canvas'; this.output = canvas.getContext('2d', { alpha: false });
-    this.work = document.createElement('canvas'); this.work.width = 480; this.work.height = 270;
+    this.work = document.createElement('canvas');
     this.ctx = this.work.getContext('2d', { willReadFrequently: true });
-    this.processed = document.createElement('canvas'); this.processed.width = 480; this.processed.height = 270;
-    this.pc = this.processed.getContext('2d'); this.pixels = this.pc.createImageData(480, 270);
-    this.history = new Uint8ClampedArray(480 * 270 * 4); this.previousTime = -1;
+    this.processed = document.createElement('canvas');
+    this.pc = this.processed.getContext('2d'); this.resize();
+  }
+  resize() {
+    const W = Math.max(480, Math.min(960, Math.round(270 * this.canvas.width / this.canvas.height)));
+    const H = Math.round(W * this.canvas.height / this.canvas.width);
+    this.work.width = this.processed.width = W; this.work.height = this.processed.height = H;
+    this.pixels = this.pc.createImageData(W, H); this.history = new Uint8ClampedArray(W * H * 4); this.previousTime = -1;
   }
   clearHistory() { this.history.fill(0); }
   render(layers, effects, bands, t, master = 1, playing = true) {
-    const W = 480, H = 270, ctx = this.ctx, fx = effectValues(effects, bands, master);
+    const W = this.work.width, H = this.work.height, ctx = this.ctx, fx = effectValues(effects, bands, master);
     if (t < this.previousTime || Math.abs(t - this.previousTime) > .3) this.clearHistory();
     this.previousTime = t; ctx.fillStyle = '#171222'; ctx.fillRect(0, 0, W, H);
     for (const l of layers) {
       if (!l.visible || !l.image) continue;
       const im = l.image, iw = im.naturalWidth, ih = im.naturalHeight, m = l.motion ? 1 : 0;
       const base = l.role === 'background' ? Math.max(W / iw, H / ih) : H * .93 / ih;
-      const s = base * l.scale * (1 + fx.breathe * .025 * m);
-      ctx.save(); ctx.globalAlpha = l.opacity;
+      const pulse = layerPulse(l, bands, master);
+      const s = base * l.scale * (1 + fx.breathe * .025 * m) * pulse.scale;
+      ctx.save(); ctx.globalAlpha = pulse.alpha; ctx.globalCompositeOperation = l.blend || 'source-over';
       ctx.translate(l.x / 100 * W + Math.sin(t * .42) * 18 * fx.parallax * l.depth * m * W / 1280,
         l.y / 100 * H + Math.cos(t * .33) * 5 * fx.parallax * l.depth * m * H / 720);
       if (l.role !== 'background') ctx.rotate((Math.sin(t * 1.4) * .006 + fx.breathe * .005) * m);
