@@ -1,12 +1,13 @@
 import { clamp } from './dsp.mjs';
 import { preset } from './effects.mjs';
 import { parseYouTube } from './youtube.mjs';
+import { STORYBOARD_SLOTS, defaultStoryboard, storyboardTiming } from './storyboard.mjs';
 
 export const SCENE_FORMAT = 'dj-animate';
 export const MAX_LAYERS = 20;
 export const MAX_MANIFEST_BYTES = 1024 * 1024;
 const PRESETS = ['sunset', 'clean', 'fever', 'warp'];
-const BLENDS = ['source-over', 'screen', 'lighter'];
+const BLENDS = ['source-over', 'screen', 'lighter', 'difference'];
 const sceneFinite = (n, fallback, min, max) => Number.isFinite(n) ? clamp(n, min, max) : fallback;
 
 // Public references must survive the conversation and keep the export canvas readable.
@@ -27,8 +28,8 @@ export function assetURL(value, baseURL, kind = 'image') {
 }
 
 export function normalizeScene(project, baseURL) {
-  if (project?.format !== SCENE_FORMAT || project.version !== 1 || !Array.isArray(project.layers) || !project.layers.length || project.layers.length > MAX_LAYERS) {
-    throw new Error('Choose a dj-animate version 1 scene with 1–20 prepared layers.');
+  if (project?.format !== SCENE_FORMAT || project.version !== 1 || !Array.isArray(project.layers) || (!project.layers.length && !project.storyboard && project.audio?.video !== true) || project.layers.length > MAX_LAYERS) {
+    throw new Error('Choose a dj-animate version 1 scene with 1–20 layers, or use a storyboard or video with up to 20 layers.');
   }
   const width = Math.round(sceneFinite(project.canvas?.width, 1280, 256, 3840));
   const height = Math.round(sceneFinite(project.canvas?.height, 720, 256, 3840));
@@ -39,7 +40,7 @@ export function normalizeScene(project, baseURL) {
   });
   const savedAudio = project.audio?.source === 'youtube'
     ? { source: 'youtube', url: parseYouTube(project.audio.url).url }
-    : project.audio ? { name: String(project.audio.name || 'Scene music').slice(0, 120), src: assetURL(project.audio.src || project.audio.data, baseURL, 'audio') } : null;
+    : project.audio ? { name: String(project.audio.name || 'Scene music').slice(0, 120), src: assetURL(project.audio.src || project.audio.data, baseURL, 'audio'), ...(project.audio.video === true ? { video: true } : {}) } : null;
   const sourceStart = savedAudio?.source === 'youtube' ? parseYouTube(savedAudio.url).start : 0;
   return {
     format: SCENE_FORMAT, version: 1, title: String(project.title || 'Your scene').slice(0, 120),
@@ -48,17 +49,34 @@ export function normalizeScene(project, baseURL) {
     selection: { start: sceneFinite(project.selection?.start, sourceStart, 0, 1800), end: sceneFinite(project.selection?.end, Math.min(1800, sourceStart + 5), 0, 1800) },
     effects,
     audio: savedAudio,
+    ...(project.storyboard ? { storyboard: normalizeStoryboard(project.storyboard, baseURL) } : {}),
     layers: project.layers.map(l => {
       const background = l.role === 'background';
+      const cue = l.cue && { start: storyboardTiming(l.cue.start), end: storyboardTiming(l.cue.end) };
+      if (cue && cue.end <= cue.start) throw new Error('The cue end must follow its start.');
       return {
         name: String(l.name || 'Sprite').slice(0, 100), src: assetURL(l.src || l.data, baseURL),
         role: background ? 'background' : 'sprite', visible: l.visible !== false, motion: l.motion !== false,
         x: sceneFinite(l.x, 50, -20, 120), y: sceneFinite(l.y, background ? 50 : 97, -20, 120),
         scale: sceneFinite(l.scale, 1, .03, 3), opacity: sceneFinite(l.opacity, 1, 0, 1), depth: sceneFinite(l.depth, background ? -.35 : 1, -1, 2),
         blend: BLENDS.includes(l.blend) ? l.blend : 'source-over', band: Math.round(sceneFinite(l.band, 0, 0, 3)),
+        ...(cue ? { cue } : {}),
         pulse: sceneFinite(l.pulse, 0, 0, .1), flicker: sceneFinite(l.flicker, 0, 0, .3),
       };
     }),
+  };
+}
+
+function normalizeStoryboard(board, baseURL) {
+  if (!Array.isArray(board.frames) || board.frames.length !== STORYBOARD_SLOTS) throw new Error('A storyboard needs four frame slots.');
+  const defaults = defaultStoryboard();
+  return {
+    loop: board.loop !== false,
+    frames: board.frames.map((frame, i) => ({
+      transition: storyboardTiming(frame?.transition ?? defaults.frames[i].transition),
+      hold: storyboardTiming(frame?.hold ?? defaults.frames[i].hold),
+      ...(frame?.src || frame?.data ? { src: assetURL(frame.src || frame.data, baseURL) } : {}),
+    })),
   };
 }
 
@@ -113,11 +131,9 @@ export function overrideScene(scene, overrides = {}) {
 }
 
 export function makeSceneLink(project, href) {
-  const references = [...(project.layers || []).map(l => l.src || l.data), ...(project.audio ? [project.audio.src || project.audio.data] : [])];
+  const references = [...(project.layers || []).map(l => l.src || l.data), ...(project.audio ? [project.audio.src || project.audio.data] : []), ...(project.storyboard?.frames || []).map(f => f.src || f.data)];
   if (references.some(src => /^(blob:|data:|file:)/i.test(src || ''))) throw new Error('Save a project to keep local uploads. A scene link needs hosted image and music files.');
   const normalized = normalizeScene(project, href);
-  const urls = [...normalized.layers.map(l => l.src), ...(normalized.audio?.src ? [normalized.audio.src] : [])];
-  if (urls.some(src => src.startsWith('data:'))) throw new Error('Save a project to keep local uploads. A scene link needs hosted image and music files.');
   const bytes = new TextEncoder().encode(JSON.stringify(normalized));
   const encoded = btoa(Array.from(bytes, b => String.fromCharCode(b)).join('')).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
   if (encoded.length > 24000) throw new Error('This scene is too large for a link. Save a project instead.');

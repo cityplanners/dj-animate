@@ -6,7 +6,7 @@ const args = process.argv.slice(2);
 const arg = key => { const i = args.indexOf(key); return i >= 0 ? args[i + 1] : undefined; };
 const port = Number(arg('--port') || process.env.PORT || 3000);
 const host = arg('--host') || '0.0.0.0';
-const types = { '.html': 'text/html', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.mp3': 'audio/mpeg', '.json': 'application/json', '.gif': 'image/gif', '.svg': 'image/svg+xml' };
+const types = { '.mp4': 'video/mp4', '.webp': 'image/webp', '.html': 'text/html', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.mp3': 'audio/mpeg', '.json': 'application/json', '.gif': 'image/gif', '.svg': 'image/svg+xml' };
 http.createServer(async (req, res) => {
   try {
     const uri = decodeURIComponent(new URL(req.url, 'http://local').pathname);

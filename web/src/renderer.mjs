@@ -1,5 +1,51 @@
 import { effectValues } from './effects.mjs';
 import { layerPulse } from './scene.mjs';
+import { storyboardAt } from './storyboard.mjs';
+
+function drawCover(ctx, image, iw, ih, width, height) {
+  const scale = Math.max(width / iw, height / ih);
+  const w = iw * scale, h = ih * scale;
+  ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+}
+
+function drawStoryboard(ctx, width, height, scene, time) {
+  const { frames, transitionCanvas } = scene;
+  const shot = storyboardAt(frames, time);
+  if (!shot || (!shot.current && !shot.previous)) return;
+  if (shot.mix === 1) {
+    drawCover(ctx, shot.current, shot.current.naturalWidth, shot.current.naturalHeight, width, height);
+    return;
+  }
+
+  // Compose in premultiplied alpha so transparent PNGs crossfade over the video.
+  if (transitionCanvas.width !== width) transitionCanvas.width = width;
+  if (transitionCanvas.height !== height) transitionCanvas.height = height;
+  const blend = transitionCanvas.getContext('2d');
+  blend.clearRect(0, 0, width, height);
+  blend.save();
+  blend.globalCompositeOperation = 'lighter';
+  for (const [image, opacity] of [[shot.previous, 1 - shot.mix], [shot.current, shot.mix]]) {
+    if (!image || !opacity) continue;
+    blend.globalAlpha = opacity;
+    drawCover(blend, image, image.naturalWidth, image.naturalHeight, width, height);
+  }
+  blend.restore();
+  ctx.drawImage(transitionCanvas, 0, 0);
+}
+
+function renderOrder(layers, scene) {
+  if (!scene) return layers;
+  return [...layers.filter(layer => !layer.cue), null, ...layers.filter(layer => layer.cue)];
+}
+
+function drawVideo(ctx, width, height, video) {
+  if (video?.readyState >= 2 && video.videoWidth) drawCover(ctx, video, video.videoWidth, video.videoHeight, width, height);
+}
+
+function layerVisible(layer, t, video) {
+  return layer.visible && layer.image && !(video && layer.role === 'background')
+    && (!layer.cue || (t >= layer.cue.start && t < layer.cue.end));
+}
 const VERTEX = `attribute vec2 position; varying vec2 uv; void main(){uv=position*.5+.5;gl_Position=vec4(position,0.,1.);}`;
 const FRAGMENT = `precision mediump float;
 varying vec2 uv; uniform sampler2D image; uniform sampler2D history;
@@ -77,14 +123,16 @@ export class SceneRenderer {
     gl.useProgram(this.program); gl.uniform2f(this.uniforms.resolution, canvas.width, canvas.height);
     this.clearHistory(); this.previousTime = -1;
   }
-  render(layers, effects, bands, t, master = 1, playing = true) {
+  render(layers, effects, bands, t, master = 1, playing = true, scene) {
     const { canvas, ctx, gl } = this, W = canvas.width, H = canvas.height;
     const fx = effectValues(effects, bands, master);
     if (t < this.previousTime || Math.abs(t - this.previousTime) > .3) this.clearHistory();
     this.previousTime = t;
     ctx.fillStyle = '#171222'; ctx.fillRect(0, 0, W, H);
-    for (const layer of layers) {
-      if (!layer.visible || !layer.image) continue;
+    drawVideo(ctx, W, H, scene?.video);
+    for (const layer of renderOrder(layers, scene)) {
+      if (!layer) { drawStoryboard(ctx, W, H, scene, t); continue; }
+      if (!layerVisible(layer, t, scene?.video)) continue;
       const image = layer.image, naturalW = image.naturalWidth, naturalH = image.naturalHeight;
       const base = layer.role === 'background' ? Math.max(W / naturalW, H / naturalH) : H * .93 / naturalH;
       const motion = layer.motion ? 1 : 0, depth = layer.depth;
@@ -132,12 +180,14 @@ class SoftwareRenderer {
     this.pixels = this.pc.createImageData(W, H); this.history = new Uint8ClampedArray(W * H * 4); this.previousTime = -1;
   }
   clearHistory() { this.history.fill(0); }
-  render(layers, effects, bands, t, master = 1, playing = true) {
+  render(layers, effects, bands, t, master = 1, playing = true, scene) {
     const W = this.work.width, H = this.work.height, ctx = this.ctx, fx = effectValues(effects, bands, master);
     if (t < this.previousTime || Math.abs(t - this.previousTime) > .3) this.clearHistory();
     this.previousTime = t; ctx.fillStyle = '#171222'; ctx.fillRect(0, 0, W, H);
-    for (const l of layers) {
-      if (!l.visible || !l.image) continue;
+    drawVideo(ctx, W, H, scene?.video);
+    for (const l of renderOrder(layers, scene)) {
+      if (!l) { drawStoryboard(ctx, W, H, scene, t); continue; }
+      if (!layerVisible(l, t, scene?.video)) continue;
       const im = l.image, iw = im.naturalWidth, ih = im.naturalHeight, m = l.motion ? 1 : 0;
       const base = l.role === 'background' ? Math.max(W / iw, H / ih) : H * .93 / ih;
       const pulse = layerPulse(l, bands, master);

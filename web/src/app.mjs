@@ -4,6 +4,7 @@ import { SceneRenderer } from './renderer.mjs';
 import { normalizeSelection, moveSelection, formatClipTime, formatClipDuration, seekMedia } from './selection.mjs';
 import { normalizeScene, sceneRequest, overrideScene, makeSceneLink, fetchSceneJSON } from './scene.mjs';
 import { parseYouTube, YouTubeTransport, LiveAudioBands, blankYouTubeAnalysis, writeLiveSample } from './youtube.mjs';
+import { defaultStoryboard, formatStoryboard, parseStoryboard, storyboardDuration, storyboardTiming } from './storyboard.mjs';
 const $ = id => document.getElementById(id);
 const audio = $('audio'), canvas = $('stage');
 let clock = audio, youtube = null, liveBands = null, tabAudioStream = null, tabAudioNode = null, youtubeSelection = null;
@@ -12,7 +13,8 @@ let audioContext, mediaSource, recordBus, recorder, recordEnd = 0, audioFile = n
 let recordingLoop = true, toastTimer, serial = 0;
 let clip = normalizeSelection(5), exportBusy = false, exportPreparing = false;
 let dirty = true, lastAudioTime = -1;
-let sceneLoading = false, audioSourceURL = null;
+let sceneLoading = false, audioSourceURL = null, sourceVideo = false, storyboard = defaultStoryboard();
+const transitionCanvas = document.createElement('canvas');
 for (const event of ['input', 'click', 'change']) document.addEventListener(event, () => { dirty = true; });
 const state = { master: .65, gain: 1, response: 1 };
 const formatTime = s => `${String(Math.floor((s || 0) / 60)).padStart(2, '0')}:${String(Math.floor((s || 0) % 60)).padStart(2, '0')}`;
@@ -63,13 +65,112 @@ function drawLayers() {
   band.onchange = () => { l.band = Number(band.value); }; bandLabel.append(band); box.append(bandLabel);
   range('Pulse', 'pulse', 0, .1, .001); range('Flicker', 'flicker', 0, .3, .01);
   const blendLabel = el('label', '', 'Blend'), blend = el('select');
-  for (const [value, name] of [['source-over', 'Normal'], ['screen', 'Screen'], ['lighter', 'Add light']]) { const option = el('option', '', name); option.value = value; option.selected = l.blend === value; blend.append(option); }
+  for (const [value, name] of [['source-over', 'Normal'], ['screen', 'Screen'], ['lighter', 'Add light'], ['difference', 'Invert / difference']]) { const option = el('option', '', name); option.value = value; option.selected = l.blend === value; blend.append(option); }
   blend.onchange = () => { l.blend = blend.value; }; blendLabel.append(blend); box.append(blendLabel);
+  if (l.cue) {
+    for (const edge of ['start', 'end']) {
+      const label = el('label', '', `Cue ${edge} (s)`), input = el('input');
+      input.type = 'number'; input.min = 0; input.max = 1800; input.step = .001; input.value = l.cue[edge];
+      input.onchange = () => {
+        try {
+          const cue = { ...l.cue, [edge]: storyboardTiming(input.valueAsNumber) };
+          if (cue.end <= cue.start) throw new Error('The cue end must follow its start.');
+          l.cue = cue;
+        } catch (error) { toast(error.message); input.value = l.cue[edge]; }
+      };
+      label.append(input); box.append(label);
+    }
+  }
   const moveLabel = el('label', 'check-label'), motion = el('input'); motion.type = 'checkbox'; motion.checked = l.motion; motion.onchange = () => { l.motion = motion.checked; }; moveLabel.append(motion, document.createTextNode('Animate this layer')); box.append(moveLabel);
   const actions = el('div', 'layer-buttons');
   for (const [name, delta] of [['Back', -1], ['Front', 1]]) { const b = el('button', '', name); b.onclick = () => { const i = layers.indexOf(l), j = clamp(i + delta, 0, layers.length - 1); [layers[i], layers[j]] = [layers[j], layers[i]]; drawLayers(); }; actions.append(b); }
   const remove = el('button', 'danger', 'Remove'); remove.onclick = () => { layers = layers.filter(x => x !== l); if (l.objectURL) URL.revokeObjectURL(l.objectURL); selected = layers.at(-1)?.id || ''; drawLayers(); }; actions.append(remove); box.append(actions);
 }
+function syncStoryboardTiming() {
+  $('storyboard-timing').value = formatStoryboard(storyboard.frames);
+  $('storyboard-duration').value = `${formatClipDuration(storyboardDuration(storyboard.frames))} of ${formatClipDuration(analysis?.duration || 0)}`;
+  dirty = true;
+}
+
+function drawStoryboardInputs() {
+  const list = $('storyboard-frames');
+  list.replaceChildren();
+  storyboard.frames.forEach((shot, i) => {
+    const name = `Frame ${i + 1}`, row = el('fieldset', 'storyboard-frame');
+    row.append(el('legend', '', name));
+    const preview = el('button', 'storyboard-thumb', shot.image ? undefined : 'Empty');
+    preview.type = 'button'; preview.setAttribute('aria-label', `Seek to ${name.toLowerCase()}`);
+    if (shot.image) { const thumb = shot.image.cloneNode(); thumb.alt = ''; preview.append(thumb); }
+    preview.onclick = () => {
+      const start = storyboardDuration(storyboard.frames.slice(0, i)) + shot.transition;
+      seekClock(Math.min(start, Math.max(0, (analysis?.duration || 0) - .001))).then(() => { dirty = true; }).catch(fail);
+    };
+    const picker = el('label', 'text-button file-button', shot.image ? 'Replace' : 'Load image');
+    const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.setAttribute('aria-label', `Load ${name.toLowerCase()}`);
+    file.onchange = async () => {
+      const chosen = file.files[0];
+      if (!chosen || busy || sceneLoading || exportBusy) return;
+      const url = URL.createObjectURL(chosen);
+      try {
+        const image = await loadImage(url);
+        if (storyboard.frames[i] !== shot || !file.isConnected || busy || sceneLoading || exportBusy) { URL.revokeObjectURL(url); return; }
+        if (shot.objectURL) URL.revokeObjectURL(shot.objectURL);
+        Object.assign(shot, { image, objectURL: url });
+        drawStoryboardInputs();
+      } catch (error) { URL.revokeObjectURL(url); fail(error); }
+      finally { file.value = ''; }
+    };
+    picker.append(file); row.append(preview, picker);
+    if (shot.image) {
+      const remove = el('button', 'text-button', 'Remove'); remove.type = 'button';
+      remove.setAttribute('aria-label', `Remove ${name.toLowerCase()}`);
+      remove.onclick = () => {
+        if (shot.objectURL) URL.revokeObjectURL(shot.objectURL);
+        delete shot.image; delete shot.objectURL; drawStoryboardInputs();
+      };
+      row.append(remove);
+    }
+    const times = el('div', 'storyboard-frame-time');
+    for (const [key, caption] of [['transition', 'Crossfade (s)'], ['hold', 'Hold (s)']]) {
+      const label = el('label', '', caption), input = el('input');
+      input.type = 'number'; input.min = 0; input.max = 1800; input.step = .001; input.value = shot[key];
+      input.onchange = () => {
+        try { shot[key] = storyboardTiming(input.valueAsNumber); $('storyboard-error').textContent = ''; }
+        catch (error) { $('storyboard-error').textContent = error.message; }
+        input.value = shot[key]; syncStoryboardTiming();
+      };
+      label.append(input); times.append(label);
+    }
+    row.append(times); list.append(row);
+  });
+  syncStoryboardTiming();
+}
+
+function applyStoryboard(next) {
+  for (const frame of storyboard.frames) if (frame.objectURL) URL.revokeObjectURL(frame.objectURL);
+  storyboard = next || defaultStoryboard();
+  $('loop').checked = clock.loop = storyboard.loop;
+  $('storyboard').open = sourceVideo || !!next?.frames.some(frame => frame.image);
+  $('storyboard-error').textContent = '';
+  drawStoryboardInputs();
+}
+
+function storyboardProject() {
+  return {
+    loop: $('loop').checked,
+    frames: storyboard.frames.map(({ image, transition, hold }) => ({
+      transition, hold, ...(image ? { src: image.src } : {}),
+    })),
+  };
+}
+
+function renderAt(time, energy, playing = false) {
+  const video = !youtube && sourceVideo ? audio : undefined;
+  const hasFrames = storyboard.frames.some(frame => frame.image);
+  renderer.render(layers, effects, energy, time, state.master, playing,
+    video || hasFrames ? { video, frames: storyboard.frames, transitionCanvas } : undefined);
+}
+
 function drawEffects() {
   dirty = true;
   $('effect-list').replaceChildren(); $('effect-count').textContent = `${effects.filter(e => e.on).length} on`;
@@ -195,7 +296,7 @@ async function loadYouTube(value, { selection, throwErrors = false } = {}) {
     analysis = blankYouTubeAnalysis(candidate.duration || Math.min(1800, Math.max(5, youtubeSelection.end)));
     clip = normalizeSelection(analysis.duration, youtubeSelection);
     if (candidate.duration) youtubeSelection = null;
-    audioFile = null; audioSourceURL = null;
+    audioFile = null; audioSourceURL = null; sourceVideo = false;
     if (audio.dataset.objectUrl) { URL.revokeObjectURL(audio.dataset.objectUrl); delete audio.dataset.objectUrl; }
     $('track-name').textContent = `YouTube · ${source.id}`;
     $('track-detail').textContent = 'YouTube playback · connect tab audio for reactive animation and export';
@@ -240,6 +341,8 @@ async function connectTabAudio() {
 function syncSelection(editingInput = '') {
   const duration = analysis?.duration || 0;
   const locked = busy || exportBusy || sceneLoading;
+  $('storyboard-duration').value = `${formatClipDuration(storyboardDuration(storyboard.frames))} of ${formatClipDuration(duration)}`;
+  $('storyboard').querySelectorAll('input, button').forEach(control => { control.disabled = locked; });
   if (duration) clip = normalizeSelection(duration, clip);
   for (const [id, value] of [['clip-start', clip.start], ['clip-end', clip.end], ['clip-start-time', clip.start], ['clip-end-time', clip.end]]) {
     $(id).max = duration || 5;
@@ -253,7 +356,7 @@ function syncSelection(editingInput = '') {
   $('clip-highlight').style.left = `${duration ? clip.start / duration * 100 : 0}%`;
   $('clip-highlight').style.width = `${duration ? (clip.end - clip.start) / duration * 100 : 100}%`;
   $('clip-full').disabled = locked || !duration;
-  for (const id of ['seek', 'play', 'loop', 'audio-file', 'project-file', 'layer-files', 'save-project', 'copy-link', 'reset-scene', 'youtube-url', 'youtube-load', 'youtube-close']) $(id).disabled = locked || !duration;
+  for (const id of ['seek', 'play', 'loop', 'audio-file', 'video-file', 'project-file', 'layer-files', 'save-project', 'copy-link', 'reset-scene', 'youtube-url', 'youtube-load', 'youtube-close']) $(id).disabled = locked || !duration;
   $('youtube-connect').disabled = locked || !youtube || !navigator.mediaDevices?.getDisplayMedia;
   $('record').disabled = busy || sceneLoading || exportPreparing || !duration || !!(youtube && (!liveBands || youtube.error || !youtube.readyState));
   if (!exportBusy) $('record').textContent = `Export ${formatClipDuration(clip.end - clip.start)}`;
@@ -268,7 +371,7 @@ function changeSelection(edge, value, editingInput = '') {
 function restoreDemoAudio() {
   closeYouTube();
   if (audio.dataset.objectUrl) { URL.revokeObjectURL(audio.dataset.objectUrl); delete audio.dataset.objectUrl; }
-  audioFile = null; audioSourceURL = null; audio.src = './assets/backseat-40-45.mp3';
+  audioFile = null; audioSourceURL = null; sourceVideo = false; audio.src = './assets/backseat-40-45.mp3';
   analysis = { ...demoAnalysis, curves: prepareEnvelopes(demoAnalysis.raw, demoAnalysis.rate, state.response) };
   $('track-name').replaceChildren(document.createTextNode('Backseat '), el('span', '', '— DÊTRE'));
   $('track-detail').textContent = '5-second study · 00:40–00:45 of the original track';
@@ -301,7 +404,7 @@ async function record() {
     if (chosen.end <= chosen.start) throw new Error('Choose a non-empty clip before exporting.');
     await seekClock(chosen.start);
     renderer.clearHistory();
-    renderer.render(layers, effects, energyAt(analysis, chosen.start, state.gain), chosen.start, state.master, false);
+    renderAt(chosen.start, energyAt(analysis, chosen.start, state.gain));
     stream = canvas.captureStream(30); for (const track of recordBus.stream.getAudioTracks()) stream.addTrack(track);
     const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/mp4'].find(s => MediaRecorder.isTypeSupported(s));
     const active = recorder = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 6000000 } : undefined);
@@ -332,23 +435,43 @@ async function addFiles(files) {
   }
   drawLayers(); $('scene-label').textContent = 'Your scene'; $('status').textContent = 'Layer added. Select it to position and scale.';
 }
-async function loadAudio(file, { throwErrors = false } = {}) {
+async function loadAudio(file, { throwErrors = false, video = false, resize = true } = {}) {
   if (!file || busy || exportBusy) return;
-  busy = true; clock.pause(); $('status').textContent = 'Analyzing four frequency bands…'; syncSelection();
+  busy = true; clock.pause(); $('status').textContent = video ? 'Preparing video…' : 'Analyzing four frequency bands…'; syncSelection();
+  let url = URL.createObjectURL(file);
   try {
-    const bytes = await file.arrayBuffer(); const decoder = new OfflineAudioContext(1, 1, 24000);
-    const buffer = await decoder.decodeAudioData(bytes);
-    if (buffer.duration > 1800) throw new Error('For this browser editor, use audio under 30 minutes.');
-    const result = await analyzeAudio(buffer);
+    let duration, width, height;
+    if (video) {
+      const probe = document.createElement('video');
+      probe.preload = 'auto'; probe.src = url;
+      try {
+        await seekMedia(probe, 0);
+        if (!probe.videoWidth) throw new Error('Choose a file with a video track.');
+        ({ duration, videoWidth: width, videoHeight: height } = probe);
+      } finally { probe.removeAttribute('src'); probe.load(); }
+    }
+    if (duration > 1800) throw new Error('For this browser editor, use media under 30 minutes.');
+    const bytes = await file.arrayBuffer(), decoder = new OfflineAudioContext(1, 1, 24000);
+    const buffer = await decoder.decodeAudioData(bytes).catch(error => { if (!video) throw error; return null; });
+    duration ??= buffer.duration;
+    if (duration > 1800) throw new Error('For this browser editor, use media under 30 minutes.');
+    const result = buffer ? await analyzeAudio(buffer) : blankYouTubeAnalysis(duration);
     closeYouTube();
     if (audio.dataset.objectUrl) URL.revokeObjectURL(audio.dataset.objectUrl);
-    const url = URL.createObjectURL(file); audio.dataset.objectUrl = url; audio.src = url; audioFile = file; audioSourceURL = null;
-    analysis = result; analysis.curves = prepareEnvelopes(analysis.raw, analysis.rate, state.response);
-    clip = normalizeSelection(buffer.duration);
-    $('track-name').textContent = file.name; $('track-detail').textContent = `${formatTime(buffer.duration)} · four bands analyzed locally`;
-    $('seek').max = buffer.duration; $('status').textContent = 'Your music is ready. Press play.';
+    audio.dataset.objectUrl = url; audio.src = url; url = null; audioFile = file; audioSourceURL = null; sourceVideo = video;
+    analysis = result; analysis.duration = duration;
+    analysis.curves = prepareEnvelopes(analysis.raw, analysis.rate, state.response);
+    clip = normalizeSelection(duration, video ? { start: 0, end: duration } : undefined);
+    if (video && resize) {
+      const scale = Math.min(1, 3840 / Math.max(width, height), Math.sqrt(4147200 / (width * height)));
+      setCanvasSize(Math.max(256, Math.round(width * scale)), Math.max(256, Math.round(height * scale)));
+      $('storyboard').open = true;
+    }
+    $('track-name').textContent = file.name;
+    $('track-detail').textContent = video ? `${formatTime(duration)} · video timeline` : `${formatTime(duration)} · four bands analyzed locally`;
+    $('seek').max = duration; $('status').textContent = video ? 'Video ready. Load four frames or press play.' : 'Your music is ready. Press play.';
   } catch (e) { if (throwErrors) throw e; fail(e); }
-  finally { busy = false; syncSelection(); }
+  finally { if (url) URL.revokeObjectURL(url); busy = false; syncSelection(); }
 }
 async function saveProject() {
   const button = $('save-project'); button.disabled = true;
@@ -357,8 +480,12 @@ async function saveProject() {
       const { image, objectURL, src, ...settings } = l;
       const data = await fileData(await (await fetch(image.src)).blob()); return { ...settings, data };
     }));
-    const project = { format: 'dj-animate', version: 1, title: $('scene-label').textContent, canvas: { width: canvas.width, height: canvas.height }, state, selection: { ...clip }, effects, layers: savedLayers, audio: youtube ? { source: 'youtube', url: youtube.source.url } : audioFile ? { name: audioFile.name, data: await fileData(audioFile) } : null };
-    download(new Blob([JSON.stringify(project)], { type: 'application/json' }), 'my-scene.djscene.json'); toast('Project saved with its image assets and any music you loaded.');
+    const project = currentProject();
+    project.layers = savedLayers;
+    project.storyboard.frames = await Promise.all(project.storyboard.frames.map(async ({ src, ...settings }) =>
+      src ? { ...settings, data: await fileData(await (await fetch(src)).blob()) } : settings));
+    if (audioFile) project.audio = { name: audioFile.name, video: sourceVideo, data: await fileData(audioFile) };
+    download(new Blob([JSON.stringify(project)], { type: 'application/json' }), 'my-scene.djscene.json'); toast('Project saved with its frames and media.');
   } catch (e) { fail(e); } finally { button.disabled = false; }
 }
 function setCanvasSize(width, height) {
@@ -371,9 +498,9 @@ function setCanvasSize(width, height) {
 }
 function currentProject() {
   return { format: 'dj-animate', version: 1, title: $('scene-label').textContent,
-    canvas: { width: canvas.width, height: canvas.height }, state: { ...state }, selection: { ...clip }, effects,
+    canvas: { width: canvas.width, height: canvas.height }, state: { ...state }, selection: { ...clip }, effects, storyboard: storyboardProject(),
     layers: layers.map(({ image, objectURL, ...settings }) => ({ ...settings, src: image.src })),
-    audio: youtube ? { source: 'youtube', url: youtube.source.url } : audioFile ? { name: audioFile.name, src: audioSourceURL || audio.src } : null };
+    audio: youtube ? { source: 'youtube', url: youtube.source.url } : audioFile ? { name: audioFile.name, src: audioSourceURL || audio.src, video: sourceVideo } : null };
 }
 function applyControls(scene) {
   Object.assign(state, scene.state); effects = scene.effects;
@@ -386,6 +513,11 @@ function applyControls(scene) {
 async function applyScene(project, baseURL = document.baseURI, overrides = {}) {
   const scene = overrideScene(normalizeScene(project, baseURL), overrides);
   const imported = await Promise.all(scene.layers.map(async ({ src, name, role, ...settings }) => layer(name, await loadImage(src), role, settings)));
+  const board = scene.storyboard && {
+    ...scene.storyboard,
+    frames: await Promise.all(scene.storyboard.frames.map(async ({ src, ...timing }) =>
+      src ? { ...timing, image: await loadImage(src) } : timing)),
+  };
   if (scene.audio?.source === 'youtube') {
     await loadYouTube(scene.audio.url, { selection: scene.selection, throwErrors: true });
   } else if (scene.audio) {
@@ -394,13 +526,13 @@ async function applyScene(project, baseURL = document.baseURI, overrides = {}) {
     if (Number(response.headers.get('content-length')) > 134217728) throw new Error('Use music files under 128 MiB.');
     const blob = await response.blob();
     if (blob.size > 134217728) throw new Error('Use music files under 128 MiB.');
-    await loadAudio(new File([blob], scene.audio.name, { type: blob.type }), { throwErrors: true });
+    await loadAudio(new File([blob], scene.audio.name, { type: blob.type }), { throwErrors: true, video: scene.audio.video, resize: false });
     audioSourceURL = scene.audio.src;
   } else restoreDemoAudio();
   clock.pause();
   layers.forEach(l => { if (l.objectURL) URL.revokeObjectURL(l.objectURL); });
-  layers = imported; selected = layers.at(-1).id;
-  setCanvasSize(scene.canvas.width, scene.canvas.height); applyControls(scene); drawLayers();
+  layers = imported; selected = layers.at(-1)?.id || '';
+  setCanvasSize(scene.canvas.width, scene.canvas.height); applyStoryboard(board); applyControls(scene); drawLayers();
   $('scene-label').textContent = scene.title;
   if (!youtube || youtube.readyState) await seekClock(clip.start);
   $('status').textContent = youtube ? 'Scene loaded with YouTube. Press play; connect tab audio for reactive motion and export.' : 'Scene loaded. Press play to animate, or load your music.';
@@ -447,9 +579,18 @@ function bind() {
   audio.onplay = () => { $('play').textContent = 'Ⅱ'; $('play').setAttribute('aria-label', 'Pause audio'); };
   audio.onpause = () => { $('play').textContent = '▶'; $('play').setAttribute('aria-label', 'Play audio'); };
   audio.onended = stopRecording;
+  audio.onseeked = audio.onloadeddata = () => { dirty = true; };
   audio.addEventListener('timeupdate', checkRecordingEnd);
   $('seek').oninput = () => { clock.currentTime = Number($('seek').value); renderer.clearHistory(); };
   $('loop').onchange = () => { clock.loop = $('loop').checked; };
+  $('storyboard-form').onsubmit = event => {
+    event.preventDefault();
+    const errorLabel = $('storyboard-error');
+    try {
+      parseStoryboard($('storyboard-timing').value).forEach((timing, i) => Object.assign(storyboard.frames[i], timing));
+      errorLabel.textContent = ''; drawStoryboardInputs();
+    } catch (error) { errorLabel.textContent = error.message; }
+  };
   for (const edge of ['start', 'end']) {
     $(`clip-${edge}`).oninput = e => changeSelection(edge, Number(e.target.value));
     const timeInput = $(`clip-${edge}-time`);
@@ -460,6 +601,7 @@ function bind() {
     timeInput.onblur = () => syncSelection();
   }
   $('clip-full').onclick = () => { clip = normalizeSelection(analysis?.duration || 0, { start: 0, end: analysis?.duration || 0 }); syncSelection(); };
+  $('video-file').onchange = e => { loadAudio(e.target.files[0], { video: true }); e.target.value = ''; };
   $('audio-file').onchange = e => loadAudio(e.target.files[0]); $('layer-files').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
   const drop = $('layer-drop');
   for (const event of ['dragover', 'dragenter']) drop.addEventListener(event, e => { e.preventDefault(); drop.classList.add('dragging'); });
@@ -474,7 +616,7 @@ function bind() {
   $('youtube-close').onclick = () => { restoreDemoAudio(); clip = normalizeSelection(analysis.duration); syncSelection(); renderer.clearHistory(); $('status').textContent = 'Backseat demo restored.'; };
   $('record').onclick = record; $('save-project').onclick = saveProject; $('copy-link').onclick = copySceneLink;
   $('project-file').onchange = e => openProject(e.target.files[0]);
-  $('reset-scene').onclick = () => { setCanvasSize(1280, 720); demoLayers().catch(fail); $('scene-label').textContent = 'Pendragon × Backseat'; };
+  $('reset-scene').onclick = () => { setCanvasSize(1280, 720); if (sourceVideo) { restoreDemoAudio(); clip = normalizeSelection(analysis.duration); } applyStoryboard(); syncSelection(); demoLayers().catch(fail); $('scene-label').textContent = 'Pendragon × Backseat'; };
   window.addEventListener('hashchange', () => { if (location.hash.startsWith('#scene=')) openSceneLink(); });
   window.addEventListener('popstate', openSceneLink);
   $('fullscreen').onclick = () => { const wrap = canvas.parentElement; (document.fullscreenElement ? document.exitFullscreen() : wrap.requestFullscreen()).catch(fail); };
@@ -493,7 +635,7 @@ function frame(now) {
   frame.lastSample = now;
   const energy = energyAt(analysis, t, state.gain);
   dirty = false; lastAudioTime = t;
-  renderer.render(layers, effects, energy, t, state.master, !clock.paused);
+  renderAt(t, energy, !clock.paused);
   drawGraph(t, energy); $('seek').value = t; $('time').textContent = `${formatTime(t)} / ${formatTime(analysis?.duration || 5)}`;
   if (recorder?.state === 'recording') {
     $('status').textContent = `Recording… ${Math.max(0, recordEnd - t).toFixed(1)}s left`;
@@ -502,7 +644,7 @@ function frame(now) {
 }
 async function boot() {
   try {
-    renderer = new SceneRenderer(canvas); drawLegend(); drawEffects(); bind(); syncSelection();
+    renderer = new SceneRenderer(canvas); drawLegend(); drawEffects(); bind(); drawStoryboardInputs(); syncSelection();
     const [, data] = await Promise.all([demoLayers(), fetch('./assets/backseat-analysis.json').then(r => { if (!r.ok) throw new Error('Sample analysis missing.'); return r.json(); })]);
     demoAnalysis = { ...data, raw: data.raw.map(x => Float32Array.from(x)) };
     analysis = { ...demoAnalysis, curves: prepareEnvelopes(demoAnalysis.raw, demoAnalysis.rate, state.response) };
