@@ -99,3 +99,51 @@ readable. See `web/scenes/first-order/scene.djscene.json` for a complete example
 The standard hostname is `https://dj.cityplanners.co/`; the fallback is
 `https://cityplanners.github.io/dj-animate/`. The same relative manifests work
 on either hostname. Verify which host responds before delivering a link.
+
+## VEHICLE objects
+
+Select a car sprite, set **Layer type → VEHICLE**, and load a rough Wavefront
+`.obj`, or use the built-in convertible proxy. The **Vehicle view** selector
+switches between the illustration, shaded model and OBJ wireframe. Travel,
+spring stiffness and damping control the suspension; each of the four wheels
+has its own music-band selector. Bands measure frequencies, rather than
+isolating named instruments. Zero travel or **Animate this layer** off holds
+the vehicle at rest. The same renderer is used for preview and video export.
+
+Prepared scenes use `role: "vehicle"` and a `vehicle` object:
+
+```json
+{
+  "model": "convertible.obj",
+  "view": "sprite",
+  "travel": 0.22,
+  "stiffness": 95,
+  "damping": 11,
+  "wheelBands": [0, 1, 2, 3],
+  "wheelGains": [1, 1, 1, 1],
+  "wheels": [
+    {"id": "fl", "x": 0.594, "y": 0.8, "rx": 0.064, "ry": 0.185},
+    {"id": "rl", "x": 0.17, "y": 0.6, "rx": 0.043, "ry": 0.148}
+  ]
+}
+```
+
+OBJ axes are X toward the nose, Y up and Z toward the right side. Give tyre
+meshes the groups `wheel_fl`, `wheel_fr`, `wheel_rl`, `wheel_rr`; other groups
+move with the chassis. The four damped springs drive heave, pitch and roll.
+The illustrated view projects its texture in depth and can separate visible
+tyres using normalized ellipse coordinates in `wheels`. Hidden wheels still
+have independent springs. A single illustration supplies only one view; the
+rough shaded model is available to inspect the complete 3D geometry.
+
+The packer copies `.obj` assets alongside images. Copy scene link retains
+hosted model URLs and suspension settings. Save project and offline scene
+bundles embed OBJ text; a locally uploaded model requires Save project.
+External material files are ignored. Models are bounded to 2 MB, 20,000
+vertices and 40,000 triangles. Suspension resets when seeking or looping.
+
+Other sprites may use `sway: {"amount": 4, "rate": 0.6, "band": 1}` for
+music-driven wind with a pinned top and moving hem. `blend: "multiply"` supports
+shadow overlays. Optional `alphaCutoff` removes low-alpha extraction halos at
+render time while preserving the original asset. `clip` is a normalized polygon
+for foreground occlusion, such as a hand over a separate poncho.

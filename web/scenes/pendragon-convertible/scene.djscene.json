@@ -1,0 +1,382 @@
+{
+  "format": "dj-animate",
+  "version": 1,
+  "title": "Pendragon · Convertible Suspension",
+  "canvas": {
+    "width": 1536,
+    "height": 864
+  },
+  "state": {
+    "master": 0.8,
+    "gain": 1,
+    "response": 1
+  },
+  "selection": {
+    "start": 0,
+    "end": 5
+  },
+  "effects": [
+    {
+      "id": "breathe",
+      "name": "Bass breathe",
+      "icon": "◉",
+      "band": 0,
+      "amount": 0,
+      "on": false,
+      "scope": "Layer motion",
+      "detail": "Foot-anchored pulse and eased scale."
+    },
+    {
+      "id": "parallax",
+      "name": "Depth drift",
+      "icon": "▱",
+      "band": 0,
+      "amount": 0,
+      "on": false,
+      "scope": "Layer motion",
+      "detail": "Layers move at different speeds according to depth."
+    },
+    {
+      "id": "rgb",
+      "name": "Prism split",
+      "icon": "◈",
+      "band": 0,
+      "amount": 0,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Separate red and blue around bright edges."
+    },
+    {
+      "id": "ripple",
+      "name": "Shockwave",
+      "icon": "◎",
+      "band": 0,
+      "amount": 0,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Concentric ripples sweep out from the center."
+    },
+    {
+      "id": "liquid",
+      "name": "Heat haze",
+      "icon": "≈",
+      "band": 0,
+      "amount": 0,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Slow liquid refraction across the image."
+    },
+    {
+      "id": "echo",
+      "name": "Afterimage",
+      "icon": "▧",
+      "band": 0,
+      "amount": 0,
+      "on": false,
+      "scope": "Scene",
+      "detail": "A fading history of the previous frames."
+    },
+    {
+      "id": "kaleido",
+      "name": "Kaleidoscope",
+      "icon": "✧",
+      "band": 0,
+      "amount": 0,
+      "on": false,
+      "scope": "Scene",
+      "detail": "A sixfold mirrored world, blended with the original."
+    },
+    {
+      "id": "vhs",
+      "name": "Tape drift",
+      "icon": "≋",
+      "band": 0,
+      "amount": 0,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Rolling VHS bands and displaced scan lines."
+    },
+    {
+      "id": "bloom",
+      "name": "Neon bloom",
+      "icon": "✺",
+      "band": 0,
+      "amount": 0,
+      "on": false,
+      "scope": "Scene",
+      "detail": "A warm halo around the brightest parts of the scene."
+    },
+    {
+      "id": "hue",
+      "name": "Sunset shift",
+      "icon": "◐",
+      "band": 0,
+      "amount": 0,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Rotate the color palette with the music."
+    },
+    {
+      "id": "pixel",
+      "name": "Digital melt",
+      "icon": "▦",
+      "band": 0,
+      "amount": 0,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Pixel blocks grow and dissolve with the hats."
+    },
+    {
+      "id": "tunnel",
+      "name": "Vertigo",
+      "icon": "◌",
+      "band": 0,
+      "amount": 0,
+      "on": false,
+      "scope": "Scene",
+      "detail": "Radial lens distortion and a subtle vortex."
+    }
+  ],
+  "audio": null,
+  "layers": [
+    {
+      "name": "Clean parking lot",
+      "src": "01-background.png",
+      "role": "background",
+      "visible": true,
+      "motion": false,
+      "x": 50,
+      "y": 50,
+      "scale": 1,
+      "opacity": 1,
+      "depth": -0.35,
+      "blend": "source-over",
+      "band": 0,
+      "pulse": 0,
+      "flicker": 0
+    },
+    {
+      "name": "Shadows",
+      "src": "02-shadows.png",
+      "role": "sprite",
+      "visible": true,
+      "motion": true,
+      "x": 50,
+      "y": 100,
+      "scale": 1.075268817204301,
+      "opacity": 0.7,
+      "depth": 1,
+      "blend": "multiply",
+      "band": 1,
+      "pulse": 0,
+      "flicker": 0.05,
+      "sway": {
+        "amount": 1.8,
+        "rate": 0.3,
+        "band": 1
+      }
+    },
+    {
+      "name": "VEHICLE · Silver convertible",
+      "src": "03-vehicle.png",
+      "role": "vehicle",
+      "visible": true,
+      "motion": true,
+      "vehicle": {
+        "model": "04-convertible.obj",
+        "view": "sprite",
+        "travel": 0.22,
+        "stiffness": 95,
+        "damping": 11,
+        "wheelBands": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "wheelGains": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "wheels": [
+          {
+            "id": "rl",
+            "x": 0.17,
+            "y": 0.6,
+            "rx": 0.043,
+            "ry": 0.148
+          },
+          {
+            "id": "fl",
+            "x": 0.594,
+            "y": 0.8,
+            "rx": 0.064,
+            "ry": 0.185
+          }
+        ]
+      },
+      "x": 54,
+      "y": 81.5,
+      "scale": 0.5,
+      "opacity": 1,
+      "depth": 1,
+      "blend": "source-over",
+      "band": 0,
+      "pulse": 0,
+      "flicker": 0
+    },
+    {
+      "name": "Pendragon · body",
+      "src": "05-pendragon.png",
+      "role": "sprite",
+      "visible": true,
+      "motion": false,
+      "x": 53.7,
+      "y": 98.5,
+      "scale": 0.97,
+      "opacity": 1,
+      "depth": 1,
+      "blend": "source-over",
+      "band": 0,
+      "pulse": 0,
+      "flicker": 0,
+      "alphaCutoff": 0.72
+    },
+    {
+      "name": "Poncho",
+      "src": "06-poncho.png",
+      "role": "sprite",
+      "visible": true,
+      "motion": true,
+      "x": 53.7,
+      "y": 98.5,
+      "scale": 0.97,
+      "opacity": 1,
+      "depth": 1,
+      "blend": "source-over",
+      "band": 1,
+      "pulse": 0,
+      "flicker": 0,
+      "sway": {
+        "amount": 4,
+        "rate": 0.6,
+        "band": 1
+      },
+      "alphaCutoff": 0.72
+    },
+    {
+      "name": "Pendragon · raised hand",
+      "src": "05-pendragon.png",
+      "role": "sprite",
+      "visible": true,
+      "motion": false,
+      "x": 53.7,
+      "y": 98.5,
+      "scale": 0.97,
+      "opacity": 1,
+      "depth": 1,
+      "blend": "source-over",
+      "band": 0,
+      "pulse": 0,
+      "flicker": 0,
+      "alphaCutoff": 0.72,
+      "clip": [
+        [
+          0.245,
+          0.28
+        ],
+        [
+          0.34,
+          0.29
+        ],
+        [
+          0.38,
+          0.23
+        ],
+        [
+          0.414,
+          0.195
+        ],
+        [
+          0.45,
+          0.197
+        ],
+        [
+          0.46,
+          0.224
+        ],
+        [
+          0.49,
+          0.216
+        ],
+        [
+          0.53,
+          0.234
+        ],
+        [
+          0.531,
+          0.25
+        ],
+        [
+          0.5,
+          0.272
+        ],
+        [
+          0.455,
+          0.291
+        ],
+        [
+          0.42,
+          0.302
+        ],
+        [
+          0.36,
+          0.34
+        ],
+        [
+          0.32,
+          0.372
+        ],
+        [
+          0.28,
+          0.382
+        ],
+        [
+          0.247,
+          0.365
+        ],
+        [
+          0.24,
+          0.325
+        ]
+      ]
+    },
+    {
+      "name": "Leaves",
+      "src": "07-leaves.png",
+      "role": "sprite",
+      "visible": true,
+      "motion": true,
+      "x": 50,
+      "y": 100,
+      "scale": 1.075268817204301,
+      "opacity": 1,
+      "depth": 1,
+      "blend": "source-over",
+      "band": 3,
+      "pulse": 0,
+      "flicker": 0,
+      "sway": {
+        "amount": 2.8,
+        "rate": 0.42,
+        "band": 3
+      }
+    }
+  ],
+  "source": {
+    "src": "08-original.png",
+    "note": "Original illustration retained. Background, body, poncho, shadows, foliage and vehicle are imagegen derivatives; registration and hidden areas are reconstructed. Rough OBJ has four independent wheel groups. No track supplied: bundled Backseat demo."
+  }
+}

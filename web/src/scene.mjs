@@ -2,12 +2,13 @@ import { clamp } from './dsp.mjs';
 import { preset } from './effects.mjs';
 import { parseYouTube } from './youtube.mjs';
 import { STORYBOARD_SLOTS, defaultStoryboard, storyboardTiming } from './storyboard.mjs';
+import { normalizeVehicle } from './vehicle.mjs';
 
 export const SCENE_FORMAT = 'dj-animate';
 export const MAX_LAYERS = 20;
 export const MAX_MANIFEST_BYTES = 1024 * 1024;
 const PRESETS = ['sunset', 'clean', 'fever', 'warp'];
-const BLENDS = ['source-over', 'screen', 'lighter', 'difference'];
+const BLENDS = ['source-over', 'screen', 'lighter', 'difference', 'multiply'];
 const sceneFinite = (n, fallback, min, max) => Number.isFinite(n) ? clamp(n, min, max) : fallback;
 
 // Public references must survive the conversation and keep the export canvas readable.
@@ -56,12 +57,16 @@ export function normalizeScene(project, baseURL) {
       if (cue && cue.end <= cue.start) throw new Error('The cue end must follow its start.');
       return {
         name: String(l.name || 'Sprite').slice(0, 100), src: assetURL(l.src || l.data, baseURL),
-        role: background ? 'background' : 'sprite', visible: l.visible !== false, motion: l.motion !== false,
+        role: background ? 'background' : l.role === 'vehicle' ? 'vehicle' : 'sprite', visible: l.visible !== false, motion: l.motion !== false,
+        ...(l.role === 'vehicle' ? { vehicle: normalizeVehicle(l.vehicle, src => assetURL(src, baseURL, 'model')) } : {}),
         x: sceneFinite(l.x, 50, -20, 120), y: sceneFinite(l.y, background ? 50 : 97, -20, 120),
         scale: sceneFinite(l.scale, 1, .03, 3), opacity: sceneFinite(l.opacity, 1, 0, 1), depth: sceneFinite(l.depth, background ? -.35 : 1, -1, 2),
         blend: BLENDS.includes(l.blend) ? l.blend : 'source-over', band: Math.round(sceneFinite(l.band, 0, 0, 3)),
         ...(cue ? { cue } : {}),
         pulse: sceneFinite(l.pulse, 0, 0, .1), flicker: sceneFinite(l.flicker, 0, 0, .3),
+        ...(l.sway ? { sway: { amount: sceneFinite(l.sway.amount, 2, 0, 16), rate: sceneFinite(l.sway.rate, .5, .05, 4), band: Math.round(sceneFinite(l.sway.band, l.band || 0, 0, 3)) } } : {}),
+        ...(l.alphaCutoff ? { alphaCutoff: sceneFinite(l.alphaCutoff, 0, 0, .95) } : {}),
+        ...(Array.isArray(l.clip) && l.clip.length >= 3 && l.clip.length <= 64 ? { clip: l.clip.map(p => [sceneFinite(p[0], 0, 0, 1), sceneFinite(p[1], 0, 0, 1)]) } : {}),
       };
     }),
   };
@@ -131,8 +136,8 @@ export function overrideScene(scene, overrides = {}) {
 }
 
 export function makeSceneLink(project, href) {
-  const references = [...(project.layers || []).map(l => l.src || l.data), ...(project.audio ? [project.audio.src || project.audio.data] : []), ...(project.storyboard?.frames || []).map(f => f.src || f.data)];
-  if (references.some(src => /^(blob:|data:|file:)/i.test(src || ''))) throw new Error('Save a project to keep local uploads. A scene link needs hosted image and music files.');
+  const references = [...(project.layers || []).flatMap(l => [l.src || l.data, l.vehicle?.model]), ...(project.audio ? [project.audio.src || project.audio.data] : []), ...(project.storyboard?.frames || []).map(f => f.src || f.data)];
+  if (references.some(src => /^(blob:|data:|file:)/i.test(src || '')) || project.layers?.some(l => l.vehicle?.obj)) throw new Error('Save a project to keep local uploads. A scene link needs hosted image, OBJ and music files.');
   const normalized = normalizeScene(project, href);
   const bytes = new TextEncoder().encode(JSON.stringify(normalized));
   const encoded = btoa(Array.from(bytes, b => String.fromCharCode(b)).join('')).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');

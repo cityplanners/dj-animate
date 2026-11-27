@@ -25,14 +25,14 @@ export async function packScene(inputFile, { id, baseURL = 'https://dj.cityplann
       if (copied.has(file)) return copied.get(file);
       const info = await stat(file);
       if (!info.isFile() || info.size > 134217728) throw new Error('Each scene asset must be a file under 128 MiB.');
-      const allowed = kind === 'audio' ? ['.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.webm', '.flac'] : ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif', '.svg'];
+      const allowed = kind === 'model' ? ['.obj'] : kind === 'audio' ? ['.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.webm', '.flac'] : ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif', '.svg'];
       const ext = path.extname(file).toLowerCase(); if (!allowed.includes(ext)) throw new Error(`Unsupported ${kind} file: ${path.basename(file)}`);
       const name = `${String(copied.size + 1).padStart(2, '0')}-${path.basename(file, path.extname(file)).replace(/[^a-z0-9-]/gi, '-').toLowerCase()}${ext}`;
       await copyFile(file, path.join(staging, name)); copied.set(file, name); return name;
     }
     if (!Array.isArray(project.layers)) throw new Error('The scene needs a layers array.');
     const layers = [];
-    for (const l of project.layers) layers.push({ ...l, data: undefined, src: await asset(l.src, 'image') });
+    for (const l of project.layers) layers.push({ ...l, data: undefined, src: await asset(l.src, 'image'), ...(l.role === 'vehicle' && l.vehicle?.model ? { vehicle: { ...l.vehicle, model: await asset(l.vehicle.model, 'model') } } : {}) });
     const audio = project.audio?.source === 'youtube' ? project.audio : project.audio ? { ...project.audio, data: undefined, src: await asset(project.audio.src, 'audio') } : null;
     const storyboard = project.storyboard && { ...project.storyboard, frames: [] };
     if (storyboard) for (const frame of project.storyboard.frames) {
@@ -41,7 +41,7 @@ export async function packScene(inputFile, { id, baseURL = 'https://dj.cityplann
     const manifestURL = new URL(`scenes/${id}/scene.djscene.json`, site);
     const normalized = normalizeScene({ ...project, layers, audio, storyboard }, manifestURL.href);
     // Validate absolute references, then retain portable paths for either hostname.
-    normalized.layers.forEach((l, i) => { l.src = layers[i].src; });
+    normalized.layers.forEach((l, i) => { l.src = layers[i].src; if (l.vehicle?.model) l.vehicle.model = layers[i].vehicle.model; });
     if (normalized.audio && normalized.audio.source !== 'youtube') normalized.audio.src = audio.src;
     normalized.storyboard?.frames.forEach((frame, i) => { frame.src = storyboard.frames[i].src; });
     if (project.source?.src) normalized.source = { src: await asset(project.source.src, 'image'), note: String(project.source.note || '').slice(0, 500) };

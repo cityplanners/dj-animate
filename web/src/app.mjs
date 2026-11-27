@@ -5,6 +5,7 @@ import { normalizeSelection, moveSelection, formatClipTime, formatClipDuration, 
 import { normalizeScene, sceneRequest, overrideScene, makeSceneLink, fetchSceneJSON } from './scene.mjs';
 import { parseYouTube, YouTubeTransport, LiveAudioBands, blankYouTubeAnalysis, writeLiveSample } from './youtube.mjs';
 import { defaultStoryboard, formatStoryboard, parseStoryboard, storyboardDuration, storyboardTiming } from './storyboard.mjs';
+import { VEHICLE_WHEELS, normalizeVehicle, prepareVehicleLayer, makeDefaultVehicleOBJ } from './vehicle.mjs';
 const $ = id => document.getElementById(id);
 const audio = $('audio'), canvas = $('stage');
 let clock = audio, youtube = null, liveBands = null, tabAudioStream = null, tabAudioNode = null, youtubeSelection = null;
@@ -30,6 +31,17 @@ const loadImage = src => new Promise((resolve, reject) => {
 });
 const fileData = blob => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(blob); });
 function layer(name, image, role, extra = {}) { return { id: `layer-${++serial}`, name, image, role, visible: true, motion: true, opacity: 1, scale: 1, depth: role === 'background' ? -.35 : 1, x: 50, y: role === 'background' ? 50 : 97, blend: 'source-over', band: 0, pulse: 0, flicker: 0, ...extra }; }
+async function prepareLayer(l) {
+  if (l.alphaCutoff) {
+    const c = document.createElement('canvas'); c.width = l.image.naturalWidth; c.height = l.image.naturalHeight;
+    const cx = c.getContext('2d', { willReadFrequently: true }); cx.drawImage(l.image, 0, 0);
+    const pixels = cx.getImageData(0, 0, c.width, c.height);
+    for (let i = 3; i < pixels.data.length; i += 4) if (pixels.data[i] < l.alphaCutoff * 255) pixels.data[i] = 0;
+    cx.putImageData(pixels, 0, 0); c.naturalWidth = c.width; c.naturalHeight = c.height; l.renderImage = c;
+  }
+  if (l.role === 'vehicle') await prepareVehicleLayer(l);
+  return l;
+}
 async function demoLayers() {
   const [bg, man] = await Promise.all([loadImage('./assets/storefront.png'), loadImage('./assets/pendragon.png')]);
   const shadow = await loadImage('./assets/ground-shadow.svg');
@@ -44,29 +56,47 @@ function drawLayers() {
     const row = el('div', `layer-item${l.id === selected ? ' selected' : ''}`); row.tabIndex = 0; row.setAttribute('role', 'button'); row.setAttribute('aria-label', `Select ${l.name}`);
     row.onclick = () => { selected = l.id; drawLayers(); }; row.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); } };
     const image = el('img', 'layer-thumb'); image.src = l.image.src; image.alt = '';
-    const title = el('div', 'layer-title'); title.append(el('strong', '', l.name), el('small', '', l.role === 'background' ? 'Background' : 'Alpha / sprite'));
+    const title = el('div', 'layer-title'); title.append(el('strong', '', l.name), el('small', '', l.role === 'vehicle' ? 'VEHICLE · four-wheel suspension' : l.role === 'background' ? 'Background' : 'Alpha / sprite'));
     const eye = el('button', `eye-button${l.visible ? '' : ' off'}`, l.visible ? '◉' : '○'); eye.setAttribute('aria-label', `${l.visible ? 'Hide' : 'Show'} ${l.name}`);
     eye.onclick = e => { e.stopPropagation(); l.visible = !l.visible; drawLayers(); };
     row.append(image, title, eye); $('layer-list').append(row);
   }
   const box = $('layer-inspector'); box.replaceChildren(); const l = layers.find(x => x.id === selected); if (!l) return;
   box.append(el('h3', '', l.name));
-  function range(label, key, min, max, step, suffix = '') {
-    const wrap = el('label'), name = el('span', '', label), input = el('input'); input.type = 'range'; input.min = min; input.max = max; input.step = step; input.value = l[key]; input.setAttribute('aria-label', `${l.name} ${label}`);
-    name.title = `${l[key]}${suffix}`; input.oninput = () => { l[key] = Number(input.value); name.title = `${l[key]}${suffix}`; };
+  function range(label, key, min, max, step, suffix = '', target = l) {
+    const wrap = el('label'), name = el('span', '', label), input = el('input'); input.type = 'range'; input.min = min; input.max = max; input.step = step; input.value = target[key]; input.setAttribute('aria-label', `${l.name} ${label}`);
+    name.title = `${target[key]}${suffix}`; input.oninput = () => { target[key] = Number(input.value); name.title = `${target[key]}${suffix}`; };
     wrap.append(name, input); box.append(wrap);
   }
   const roleLabel = el('label', '', 'Layer type'), role = el('select');
-  for (const [value, name] of [['sprite', 'Sprite'], ['background', 'Background']]) { const o = el('option', '', name); o.value = value; o.selected = l.role === value; role.append(o); }
-  role.onchange = () => { l.role = role.value; l.y = role.value === 'background' ? 50 : 97; drawLayers(); }; roleLabel.append(role); box.append(roleLabel);
+  for (const [value, name] of [['sprite', 'Sprite'], ['background', 'Background'], ['vehicle', 'VEHICLE']]) { const o = el('option', '', name); o.value = value; o.selected = l.role === value; role.append(o); }
+  role.setAttribute('aria-label', `${l.name} Layer type`);
+  role.onchange = async () => {
+    if (sceneLoading || exportBusy || busy) { role.value = l.role; return; }
+    const previous = l.role; l.role = role.value;
+    try {
+      if (l.role === 'vehicle') {
+        l.vehicle ||= normalizeVehicle(location.protocol === 'file:' ? { obj: makeDefaultVehicleOBJ() } : { model: new URL('./assets/vehicle.obj', document.baseURI).href });
+        await prepareVehicleLayer(l);
+      } else if (l.role === 'background' || previous === 'background') l.y = l.role === 'background' ? 50 : 97;
+    } catch (error) { l.role = previous; fail(error); }
+    drawLayers();
+  }; roleLabel.append(role); box.append(roleLabel);
   range('Horizontal', 'x', -20, 120, .5); range('Vertical', 'y', -20, 120, .5); range('Scale', 'scale', .03, 3, .01); range('Opacity', 'opacity', 0, 1, .01); range('Depth', 'depth', -1, 2, .05);
   const bandLabel = el('label', '', 'Layer audio band'), band = el('select');
   BANDS.forEach((b, i) => { const option = el('option', '', b.name); option.value = i; option.selected = l.band === i; band.append(option); });
-  band.onchange = () => { l.band = Number(band.value); }; bandLabel.append(band); box.append(bandLabel);
+  band.onchange = () => { l.band = Number(band.value); if (l.sway) l.sway.band = l.band; }; bandLabel.append(band); box.append(bandLabel);
   range('Pulse', 'pulse', 0, .1, .001); range('Flicker', 'flicker', 0, .3, .01);
   const blendLabel = el('label', '', 'Blend'), blend = el('select');
-  for (const [value, name] of [['source-over', 'Normal'], ['screen', 'Screen'], ['lighter', 'Add light'], ['difference', 'Invert / difference']]) { const option = el('option', '', name); option.value = value; option.selected = l.blend === value; blend.append(option); }
+  for (const [value, name] of [['source-over', 'Normal'], ['screen', 'Screen'], ['lighter', 'Add light'], ['difference', 'Invert / difference'], ['multiply', 'Shadow / multiply']]) { const option = el('option', '', name); option.value = value; option.selected = l.blend === value; blend.append(option); }
   blend.onchange = () => { l.blend = blend.value; }; blendLabel.append(blend); box.append(blendLabel);
+  if (l.role === 'vehicle') drawVehicleInspector(box, l, range);
+  else {
+    const windLabel = el('label', 'check-label'), wind = el('input'); wind.type = 'checkbox'; wind.checked = !!l.sway;
+    wind.onchange = () => { if (wind.checked) l.sway = { amount: 3, rate: .45, band: l.band }; else delete l.sway; drawLayers(); };
+    windLabel.append(wind, document.createTextNode('Cloth / leaf sway')); box.append(windLabel);
+    if (l.sway) { range('Sway amount', 'amount', 0, 16, .25, '', l.sway); range('Sway speed', 'rate', .05, 4, .05, '', l.sway); }
+  }
   if (l.cue) {
     for (const edge of ['start', 'end']) {
       const label = el('label', '', `Cue ${edge} (s)`), input = el('input');
@@ -85,6 +115,36 @@ function drawLayers() {
   const actions = el('div', 'layer-buttons');
   for (const [name, delta] of [['Back', -1], ['Front', 1]]) { const b = el('button', '', name); b.onclick = () => { const i = layers.indexOf(l), j = clamp(i + delta, 0, layers.length - 1); [layers[i], layers[j]] = [layers[j], layers[i]]; drawLayers(); }; actions.append(b); }
   const remove = el('button', 'danger', 'Remove'); remove.onclick = () => { layers = layers.filter(x => x !== l); if (l.objectURL) URL.revokeObjectURL(l.objectURL); selected = layers.at(-1)?.id || ''; drawLayers(); }; actions.append(remove); box.append(actions);
+}
+function drawVehicleInspector(box, l, range) {
+  box.append(el('h3', '', 'VEHICLE suspension'));
+  const label = el('label', '', 'Vehicle view'), view = el('select'); view.setAttribute('aria-label', 'Vehicle view');
+  for (const [value, name] of [['sprite', 'Illustrated car'], ['model', 'Rough 3D model'], ['wireframe', 'OBJ wireframe']]) {
+    const option = el('option', '', name); option.value = value; option.selected = l.vehicle.view === value; view.append(option);
+  }
+  view.onchange = () => { l.vehicle.view = view.value; }; label.append(view); box.append(label);
+  range('Suspension travel', 'travel', 0, .65, .01, '', l.vehicle);
+  range('Spring stiffness', 'stiffness', 20, 240, 1, '', l.vehicle);
+  range('Spring damping', 'damping', 3, 30, .5, '', l.vehicle);
+  const names = ['Front left', 'Front right', 'Rear left', 'Rear right'];
+  VEHICLE_WHEELS.forEach((wheel, i) => {
+    const label = el('label', '', `${names[i]} music`), select = el('select'); select.setAttribute('aria-label', `${names[i]} music`);
+    BANDS.forEach((band, j) => { const option = el('option', '', band.name); option.value = j; option.selected = l.vehicle.wheelBands[i] === j; select.append(option); });
+    select.onchange = () => { l.vehicle.wheelBands[i] = Number(select.value); }; label.append(select); box.append(label);
+  });
+  const fileLabel = el('label', 'text-button file-button', 'Load .obj'), file = el('input'); file.type = 'file'; file.accept = '.obj,text/plain'; file.setAttribute('aria-label', 'Load vehicle OBJ');
+  file.onchange = async () => {
+    const chosen = file.files[0]; if (!chosen || sceneLoading || exportBusy || busy) return;
+    const previous = l.vehicle;
+    try {
+      if (chosen.size > 2000000) throw new Error('Use an OBJ model under 2 MB.');
+      l.vehicle = normalizeVehicle({ ...previous, model: undefined, obj: await chosen.text() }); await prepareVehicleLayer(l); toast('Vehicle model loaded. Save project to keep the OBJ.');
+    } catch (error) { l.vehicle = previous; fail(error); }
+    drawLayers();
+  };
+  fileLabel.append(file); const downloadModel = el('button', 'text-button', 'Download .obj');
+  downloadModel.onclick = () => download(new Blob([l.vehicleRuntime.text], { type: 'text/plain' }), 'vehicle.obj');
+  const actions = el('div', 'layer-buttons'); actions.append(fileLabel, downloadModel); box.append(actions);
 }
 function syncStoryboardTiming() {
   $('storyboard-timing').value = formatStoryboard(storyboard.frames);
@@ -477,8 +537,10 @@ async function saveProject() {
   const button = $('save-project'); button.disabled = true;
   try {
     const savedLayers = await Promise.all(layers.map(async l => {
-      const { image, objectURL, src, ...settings } = l;
-      const data = await fileData(await (await fetch(image.src)).blob()); return { ...settings, data };
+      const { image, renderImage, vehicleRuntime, objectURL, src, ...settings } = l;
+      const data = await fileData(await (await fetch(image.src)).blob());
+      if (settings.role === 'vehicle') settings.vehicle = { ...settings.vehicle, model: undefined, obj: vehicleRuntime.text };
+      return { ...settings, data };
     }));
     const project = currentProject();
     project.layers = savedLayers;
@@ -499,7 +561,7 @@ function setCanvasSize(width, height) {
 function currentProject() {
   return { format: 'dj-animate', version: 1, title: $('scene-label').textContent,
     canvas: { width: canvas.width, height: canvas.height }, state: { ...state }, selection: { ...clip }, effects, storyboard: storyboardProject(),
-    layers: layers.map(({ image, objectURL, ...settings }) => ({ ...settings, src: image.src })),
+    layers: layers.map(({ image, renderImage, vehicleRuntime, objectURL, ...settings }) => ({ ...settings, src: image.src })),
     audio: youtube ? { source: 'youtube', url: youtube.source.url } : audioFile ? { name: audioFile.name, src: audioSourceURL || audio.src, video: sourceVideo } : null };
 }
 function applyControls(scene) {
@@ -512,7 +574,7 @@ function applyControls(scene) {
 }
 async function applyScene(project, baseURL = document.baseURI, overrides = {}) {
   const scene = overrideScene(normalizeScene(project, baseURL), overrides);
-  const imported = await Promise.all(scene.layers.map(async ({ src, name, role, ...settings }) => layer(name, await loadImage(src), role, settings)));
+  const imported = await Promise.all(scene.layers.map(async ({ src, name, role, ...settings }) => prepareLayer(layer(name, await loadImage(src), role, settings))));
   const board = scene.storyboard && {
     ...scene.storyboard,
     frames: await Promise.all(scene.storyboard.frames.map(async ({ src, ...timing }) =>

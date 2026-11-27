@@ -1,6 +1,22 @@
 import { effectValues } from './effects.mjs';
 import { layerPulse } from './scene.mjs';
 import { storyboardAt } from './storyboard.mjs';
+import { drawVehicle } from './vehicle.mjs';
+
+function drawLayerArt(ctx, layer, image, anchorX, anchorY, bands, t, master) {
+  const w = image.naturalWidth, h = image.naturalHeight;
+  if (layer.clip) {
+    ctx.beginPath(); layer.clip.forEach(([x, y], i) => ctx[i ? 'lineTo' : 'moveTo'](x * w - anchorX, y * h - anchorY)); ctx.closePath(); ctx.clip();
+  }
+  if (!layer.sway || !layer.motion) { ctx.drawImage(image, -anchorX, -anchorY); return; }
+  const sway = layer.sway, energy = Math.min(1.5, Math.max(0, (bands[sway.band] || 0) * master));
+  if (energy < .0001) { ctx.drawImage(image, -anchorX, -anchorY); return; }
+  for (let i = 0; i < 48; i++) {
+    const top = Math.max(0, Math.floor(h * i / 48) - 1), bottom = Math.min(h, Math.floor(h * (i + 1) / 48) + 1), progress = (i + .5) / 48;
+    const dx = Math.sin(t * sway.rate * Math.PI * 2 - progress * 3) * sway.amount * energy * progress * progress * h / 720;
+    ctx.drawImage(image, 0, top, w, bottom - top, -anchorX + dx, top - anchorY, w, bottom - top);
+  }
+}
 
 function drawCover(ctx, image, iw, ih, width, height) {
   const scale = Math.max(width / iw, height / ih);
@@ -133,7 +149,7 @@ export class SceneRenderer {
     for (const layer of renderOrder(layers, scene)) {
       if (!layer) { drawStoryboard(ctx, W, H, scene, t); continue; }
       if (!layerVisible(layer, t, scene?.video)) continue;
-      const image = layer.image, naturalW = image.naturalWidth, naturalH = image.naturalHeight;
+      const image = layer.renderImage || layer.image, naturalW = image.naturalWidth, naturalH = image.naturalHeight;
       const base = layer.role === 'background' ? Math.max(W / naturalW, H / naturalH) : H * .93 / naturalH;
       const motion = layer.motion ? 1 : 0, depth = layer.depth;
       const breathing = fx.breathe * .025 * motion;
@@ -144,11 +160,12 @@ export class SceneRenderer {
       ctx.save(); ctx.globalAlpha = pulse.alpha; ctx.globalCompositeOperation = layer.blend || 'source-over';
       const px = layer.x / 100 * W + driftX, py = layer.y / 100 * H + driftY;
       ctx.translate(px, py);
+      if (layer.role === 'vehicle') { drawVehicle(ctx, layer, bands, t, master, playing, naturalW * base * layer.scale, naturalH * base * layer.scale); ctx.restore(); continue; }
       const anchored = layer.role !== 'background';
-      if (anchored) ctx.rotate((Math.sin(t * 1.4) * .006 + fx.breathe * .005) * motion);
+      if (anchored && !layer.sway) ctx.rotate((Math.sin(t * 1.4) * .006 + fx.breathe * .005) * motion);
       ctx.scale(scale, scale);
       const anchorX = naturalW / 2, anchorY = anchored ? naturalH : naturalH / 2;
-      ctx.drawImage(image, -anchorX, -anchorY); ctx.restore();
+      drawLayerArt(ctx, layer, image, anchorX, anchorY, bands, t, master); ctx.restore();
     }
     gl.viewport(0, 0, W, H); gl.useProgram(this.program);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.textures[0]);
@@ -171,33 +188,41 @@ class SoftwareRenderer {
     this.work = document.createElement('canvas');
     this.ctx = this.work.getContext('2d', { willReadFrequently: true });
     this.processed = document.createElement('canvas');
+    this.direct = document.createElement('canvas'); this.dc = this.direct.getContext('2d');
     this.pc = this.processed.getContext('2d'); this.resize();
   }
   resize() {
     const W = Math.max(480, Math.min(960, Math.round(270 * this.canvas.width / this.canvas.height)));
     const H = Math.round(W * this.canvas.height / this.canvas.width);
+    this.direct.width = this.canvas.width; this.direct.height = this.canvas.height;
     this.work.width = this.processed.width = W; this.work.height = this.processed.height = H;
     this.pixels = this.pc.createImageData(W, H); this.history = new Uint8ClampedArray(W * H * 4); this.previousTime = -1;
   }
   clearHistory() { this.history.fill(0); }
   render(layers, effects, bands, t, master = 1, playing = true, scene) {
-    const W = this.work.width, H = this.work.height, ctx = this.ctx, fx = effectValues(effects, bands, master);
+    const fx = effectValues(effects, bands, master);
+    const post = ['rgb', 'ripple', 'liquid', 'echo', 'kaleido', 'vhs', 'bloom', 'hue', 'pixel', 'tunnel'].some(key => fx[key] > .00001);
+    const W = post ? this.work.width : this.direct.width, H = post ? this.work.height : this.direct.height, ctx = post ? this.ctx : this.dc;
     if (t < this.previousTime || Math.abs(t - this.previousTime) > .3) this.clearHistory();
     this.previousTime = t; ctx.fillStyle = '#171222'; ctx.fillRect(0, 0, W, H);
     drawVideo(ctx, W, H, scene?.video);
     for (const l of renderOrder(layers, scene)) {
       if (!l) { drawStoryboard(ctx, W, H, scene, t); continue; }
       if (!layerVisible(l, t, scene?.video)) continue;
-      const im = l.image, iw = im.naturalWidth, ih = im.naturalHeight, m = l.motion ? 1 : 0;
+      const im = l.renderImage || l.image, iw = im.naturalWidth, ih = im.naturalHeight, m = l.motion ? 1 : 0;
       const base = l.role === 'background' ? Math.max(W / iw, H / ih) : H * .93 / ih;
       const pulse = layerPulse(l, bands, master);
       const s = base * l.scale * (1 + fx.breathe * .025 * m) * pulse.scale;
       ctx.save(); ctx.globalAlpha = pulse.alpha; ctx.globalCompositeOperation = l.blend || 'source-over';
       ctx.translate(l.x / 100 * W + Math.sin(t * .42) * 18 * fx.parallax * l.depth * m * W / 1280,
         l.y / 100 * H + Math.cos(t * .33) * 5 * fx.parallax * l.depth * m * H / 720);
-      if (l.role !== 'background') ctx.rotate((Math.sin(t * 1.4) * .006 + fx.breathe * .005) * m);
-      ctx.scale(s, s); ctx.drawImage(im, -iw / 2, l.role === 'background' ? -ih / 2 : -ih); ctx.restore();
+      if (l.role === 'vehicle') { drawVehicle(ctx, l, bands, t, master, playing, iw * base * l.scale, ih * base * l.scale); ctx.restore(); continue; }
+      if (l.role !== 'background' && !l.sway) ctx.rotate((Math.sin(t * 1.4) * .006 + fx.breathe * .005) * m);
+      ctx.scale(s, s); drawLayerArt(ctx, l, im, iw / 2, l.role === 'background' ? ih / 2 : ih, bands, t, master); ctx.restore();
     }
+    // Layer-only animation can stay full resolution without a per-pixel shader pass.
+    if (!post) { this.output.drawImage(this.direct, 0, 0); this.wasDirect = true; return; }
+    if (this.wasDirect) { this.clearHistory(); this.wasDirect = false; }
     const src = ctx.getImageData(0, 0, W, H).data, dst = this.pixels.data;
     const safe = (x, y) => (Math.max(0, Math.min(H - 1, y | 0)) * W + Math.max(0, Math.min(W - 1, x | 0))) * 4;
     const angle = fx.hue * 2.7, co = Math.cos(angle), si = Math.sin(angle) / Math.sqrt(3), third = (1 - co) / 3;

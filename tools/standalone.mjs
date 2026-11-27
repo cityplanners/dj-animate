@@ -5,7 +5,7 @@ const root = path.resolve(import.meta.dirname, '..'), web = path.join(root, 'web
 let html = await readFile(path.join(web, 'index.html'), 'utf8');
 const css = await readFile(path.join(web, 'style.css'), 'utf8');
 let script = '';
-for (const name of ['dsp', 'effects', 'youtube', 'storyboard', 'scene', 'renderer', 'selection', 'app']) {
+for (const name of ['dsp', 'effects', 'youtube', 'storyboard', 'vehicle', 'scene', 'renderer', 'selection', 'app']) {
   const source = await readFile(path.join(web, 'src', name + '.mjs'), 'utf8');
   script += source.replace(/^import .*?;\s*$/gm, '').replace(/^export /gm, '') + '\n';
 }
@@ -32,7 +32,14 @@ if (sceneArg >= 0) {
     const file = path.resolve(folder, src); if (!file.startsWith(folder + path.sep)) throw new Error('Invalid offline asset path.');
     return `data:${mimeTypes[path.extname(file)] || 'application/octet-stream'};base64,${(await readFile(file)).toString('base64')}`;
   }
-  for (const layer of project.layers) { layer.data = await embed(layer.src); delete layer.src; }
+  for (const layer of project.layers) {
+    layer.data = await embed(layer.src); delete layer.src;
+    if (layer.vehicle?.model) {
+      const model = path.resolve(folder, layer.vehicle.model);
+      if (!model.startsWith(folder + path.sep)) throw new Error('An offline vehicle needs a packaged local OBJ.');
+      layer.vehicle.obj = await readFile(model, 'utf8'); delete layer.vehicle.model;
+    }
+  }
   for (const frame of project.storyboard?.frames || []) if (frame.src) { frame.data = await embed(frame.src); delete frame.src; }
   if (project.audio?.source === 'youtube') throw new Error('YouTube playback requires the hosted HTTPS page. Use a music file for an offline scene bundle.');
   if (project.audio) { project.audio.data = await embed(project.audio.src); delete project.audio.src; }
